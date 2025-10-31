@@ -1,0 +1,45 @@
+version: '3'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - PIDFILE=/usr/src/app/tmp/pids/server.pid
+      - RAILS_ENV=development
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=development
+      - POSTGRES_HOST=database.service.nexus.internal
+      - REDIS_URL=redis://redis.service.nexus.internal:6379/0
+      - DOCKER_ENABLED=false
+    networks:
+      - internal
+    depends_on:
+      - database.service.nexus.internal
+      - redis.service.nexus.internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  database.service.nexus.internal:
+    image: postgres:14.1-alpine
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    environment:
+      - POSTGRES_PASSWORD=development
+
+  redis.service.nexus.internal:
+    image: redis:6.2-alpine
+    networks:
+      - internal
+
+volumes:
+  pg_data:
+
+networks:
+  internal:
+    driver: bridge

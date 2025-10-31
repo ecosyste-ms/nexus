@@ -1,0 +1,13 @@
+:concurrency: 5
+:queues:
+  - default
+  - low
+
+:schedule:
+  sync_all_repositories:
+    cron: '0 */24 * * *'  # Every 24 hours
+    class: SyncAllRepositoriesWorker
+
+  cleanup_old_indexes:
+    cron: '0 2 * * *'  # Daily at 2 AM
+    class: CleanupOldIndexesWorker

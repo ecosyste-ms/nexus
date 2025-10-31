@@ -1,0 +1,374 @@
+  [1m[35mSQL (0.3ms)[0m  [1m[35mSET search_path TO public[0m
+  [1m[35m (225.4ms)[0m  [1m[35mCREATE DATABASE "nexus_development" ENCODING = 'unicode'[0m
+  [1m[35mSQL (0.7ms)[0m  [1m[35mSET search_path TO public[0m
+  [1m[35m (139.2ms)[0m  [1m[35mCREATE DATABASE "nexus_test" ENCODING = 'unicode'[0m
+  [1m[35m (3.4ms)[0m  [1m[35mCREATE TABLE "schema_migrations" ("version" character varying NOT NULL PRIMARY KEY)[0m
+  [1m[35m (1.0ms)[0m  [1m[35mCREATE TABLE "ar_internal_metadata" ("key" character varying NOT NULL PRIMARY KEY, "value" character varying, "created_at" timestamp(6) NOT NULL, "updated_at" timestamp(6) NOT NULL)[0m
+  [1m[35m (0.2ms)[0m  [1m[34mSELECT pg_try_advisory_lock(8739819780020138670)[0m
+  [1m[36mActiveRecord::SchemaMigration Load (3.1ms)[0m  [1m[34mSELECT "schema_migrations"."version" FROM "schema_migrations" ORDER BY "schema_migrations"."version" ASC[0m
+  [1m[36mActiveRecord::InternalMetadata Load (1.1ms)[0m  [1m[34mSELECT * FROM "ar_internal_metadata" WHERE "ar_internal_metadata"."key" = $1 ORDER BY "ar_internal_metadata"."key" ASC LIMIT 1[0m  [[nil, "environment"]]
+  [1m[36mActiveRecord::InternalMetadata Create (0.9ms)[0m  [1m[32mINSERT INTO "ar_internal_metadata" ("key", "value", "created_at", "updated_at") VALUES ('environment', 'development', '2025-10-31 16:38:05.935554', '2025-10-31 16:38:05.935556') RETURNING "key"[0m
+Migrating to CreateRepositories (20251031000001)
+  [1m[36mTRANSACTION (0.1ms)[0m  [1m[35mBEGIN[0m
+  [1m[35m (3.3ms)[0m  [1m[35mCREATE TABLE "repositories" ("id" bigserial primary key, "name" character varying NOT NULL, "url" character varying NOT NULL, "ecosystem" character varying DEFAULT 'maven', "last_indexed_at" timestamp(6), "status" character varying DEFAULT 'pending', "error_message" text, "package_count" integer DEFAULT 0, "index_size_bytes" bigint, "metadata" jsonb DEFAULT '{}', "created_at" timestamp(6) NOT NULL, "updated_at" timestamp(6) NOT NULL)[0m
+  [1m[35m (0.4ms)[0m  [1m[35mCREATE UNIQUE INDEX "index_repositories_on_name" ON "repositories" ("name")[0m
+  [1m[35m (0.4ms)[0m  [1m[35mCREATE INDEX "index_repositories_on_status" ON "repositories" ("status")[0m
+  [1m[35m (0.3ms)[0m  [1m[35mCREATE INDEX "index_repositories_on_last_indexed_at" ON "repositories" ("last_indexed_at")[0m
+  [1m[36mActiveRecord::SchemaMigration Create (0.3ms)[0m  [1m[32mINSERT INTO "schema_migrations" ("version") VALUES ('20251031000001') RETURNING "version"[0m
+  [1m[36mTRANSACTION (0.1ms)[0m  [1m[35mCOMMIT[0m
+Migrating to CreatePackages (20251031000002)
+  [1m[36mTRANSACTION (0.2ms)[0m  [1m[35mBEGIN[0m
+  [1m[35m (2.1ms)[0m  [1m[35mCREATE TABLE "packages" ("id" bigserial primary key, "repository_id" bigint NOT NULL, "name" character varying NOT NULL, "group_id" character varying NOT NULL, "artifact_id" character varying NOT NULL, "last_modified" timestamp(6), "metadata" jsonb DEFAULT '{}', "created_at" timestamp(6) NOT NULL, "updated_at" timestamp(6) NOT NULL, CONSTRAINT "fk_rails_6e38ac67c3"
+FOREIGN KEY ("repository_id")
+  REFERENCES "repositories" ("id")
+)[0m
+  [1m[35m (0.4ms)[0m  [1m[35mCREATE INDEX "index_packages_on_repository_id" ON "packages" ("repository_id")[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE UNIQUE INDEX "index_packages_on_repository_id_and_name" ON "packages" ("repository_id", "name")[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE INDEX "index_packages_on_group_id" ON "packages" ("group_id")[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE INDEX "index_packages_on_artifact_id" ON "packages" ("artifact_id")[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE INDEX "index_packages_on_last_modified" ON "packages" ("last_modified")[0m
+  [1m[36mActiveRecord::SchemaMigration Create (0.4ms)[0m  [1m[32mINSERT INTO "schema_migrations" ("version") VALUES ('20251031000002') RETURNING "version"[0m
+  [1m[36mTRANSACTION (0.3ms)[0m  [1m[35mCOMMIT[0m
+Migrating to CreateVersions (20251031000003)
+  [1m[36mTRANSACTION (0.3ms)[0m  [1m[35mBEGIN[0m
+  [1m[35m (2.0ms)[0m  [1m[35mCREATE TABLE "versions" ("id" bigserial primary key, "package_id" bigint NOT NULL, "number" character varying NOT NULL, "last_modified" timestamp(6), "packaging" character varying, "metadata" jsonb DEFAULT '{}', "created_at" timestamp(6) NOT NULL, "updated_at" timestamp(6) NOT NULL, CONSTRAINT "fk_rails_147d97cf36"
+FOREIGN KEY ("package_id")
+  REFERENCES "packages" ("id")
+)[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE INDEX "index_versions_on_package_id" ON "versions" ("package_id")[0m
+  [1m[35m (0.5ms)[0m  [1m[35mCREATE UNIQUE INDEX "index_versions_on_package_id_and_number" ON "versions" ("package_id", "number")[0m
+  [1m[35m (0.3ms)[0m  [1m[35mCREATE INDEX "index_versions_on_last_modified" ON "versions" ("last_modified")[0m
+  [1m[36mActiveRecord::SchemaMigration Create (0.1ms)[0m  [1m[32mINSERT INTO "schema_migrations" ("version") VALUES ('20251031000003') RETURNING "version"[0m
+  [1m[36mTRANSACTION (0.3ms)[0m  [1m[35mCOMMIT[0m
+  [1m[35m (0.5ms)[0m  [1m[34mSELECT pg_advisory_unlock(8739819780020138670)[0m
+  [1m[36mActiveRecord::SchemaMigration Load (0.3ms)[0m  [1m[34mSELECT "schema_migrations"."version" FROM "schema_migrations" ORDER BY "schema_migrations"."version" ASC[0m
+  [1m[36mActiveRecord::SchemaMigration Load (3.9ms)[0m  [1m[34mSELECT "schema_migrations"."version" FROM "schema_migrations" ORDER BY "schema_migrations"."version" ASC[0m
+source=rack-timeout id=f1cb17eb-0c40-449b-a0da-fc5447119d86 timeout=15000ms state=ready
+source=rack-timeout id=f1cb17eb-0c40-449b-a0da-fc5447119d86 timeout=15000ms service=1ms state=active
+Started GET "/" for 127.0.0.1 at 2025-10-31 17:01:11 +0000
+Processing by Rails::WelcomeController#index as HTML
+  Rendering /Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/railties-8.0.4/lib/rails/templates/rails/welcome/index.html.erb
+  Rendered /Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/railties-8.0.4/lib/rails/templates/rails/welcome/index.html.erb (Duration: 0.4ms | GC: 0.0ms)
+Completed 200 OK in 12ms (Views: 2.8ms | ActiveRecord: 0.0ms (0 queries, 0 cached) | GC: 0.0ms)
+
+
+source=rack-timeout id=f1cb17eb-0c40-449b-a0da-fc5447119d86 timeout=15000ms service=36ms state=completed
+source=rack-timeout id=54a75447-1bae-4ef6-82ac-2e11b6a7ae0a timeout=15000ms state=ready
+Started GET "/" for 127.0.0.1 at 2025-10-31 17:01:12 +0000
+source=rack-timeout id=54a75447-1bae-4ef6-82ac-2e11b6a7ae0a timeout=15000ms service=3ms state=active
+Processing by Rails::WelcomeController#index as HTML
+  Rendering /Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/railties-8.0.4/lib/rails/templates/rails/welcome/index.html.erb
+  Rendered /Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/railties-8.0.4/lib/rails/templates/rails/welcome/index.html.erb (Duration: 0.3ms | GC: 0.0ms)
+Completed 200 OK in 9ms (Views: 7.3ms | ActiveRecord: 0.0ms (0 queries, 0 cached) | GC: 0.0ms)
+
+
+source=rack-timeout id=54a75447-1bae-4ef6-82ac-2e11b6a7ae0a timeout=15000ms service=25ms state=completed
+source=rack-timeout id=ca1abb76-b68c-4702-a9cb-0b68745af148 timeout=15000ms state=ready
+Started GET "/api/v1/repositories/build.shibboleth.net/status" for 127.0.0.1 at 2025-10-31 17:01:23 +0000
+source=rack-timeout id=ca1abb76-b68c-4702-a9cb-0b68745af148 timeout=15000ms service=5ms state=active
+Processing by Api::V1::RepositoriesController#status as JSON
+  Parameters: {"name" => "build.shibboleth.net"}
+  [1m[36mRepository Load (6.7ms)[0m  [1m[34mSELECT "repositories".* FROM "repositories" WHERE "repositories"."name" = $1 LIMIT $2[0m  [["name", "build.shibboleth.net"], ["LIMIT", 1]]
+Completed 404 Not Found in 145ms (ActiveRecord: 26.9ms (1 query, 0 cached) | GC: 0.0ms)
+
+
+  
+ActiveRecord::RecordNotFound (Couldn't find Repository with [WHERE "repositories"."name" = $1]):
+  
+app/controllers/api/v1/repositories_controller.rb:40:in 'Api::V1::RepositoriesController#status'
+source=rack-timeout id=ca1abb76-b68c-4702-a9cb-0b68745af148 timeout=15000ms service=222ms state=completed
+source=rack-timeout id=577b1ffd-b049-4235-9524-370bb064dac1 timeout=15000ms state=ready
+Started GET "/favicon.ico" for 127.0.0.1 at 2025-10-31 17:01:23 +0000
+source=rack-timeout id=577b1ffd-b049-4235-9524-370bb064dac1 timeout=15000ms service=2ms state=active
+  
+ActionController::RoutingError (No route matches [GET] "/favicon.ico"):
+  
+source=rack-timeout id=577b1ffd-b049-4235-9524-370bb064dac1 timeout=15000ms service=160ms state=completed
+source=rack-timeout id=381392d9-50dd-4e01-a802-263096d2e343 timeout=15000ms state=ready
+source=rack-timeout id=381392d9-50dd-4e01-a802-263096d2e343 timeout=15000ms service=1ms state=active
+Started POST "/api/v1/sync_repositories" for ::1 at 2025-10-31 17:01:42 +0000
+Processing by Api::V1::RepositoriesController#sync as JSON
+  Parameters: {"_json" => [{"name" => "build.shibboleth.net", "url" => "https://build.shibboleth.net/nexus/content/repositories/releases"}], "repository" => {}}
+  [1m[36mRepository Load (1.4ms)[0m  [1m[34mSELECT "repositories".* FROM "repositories" WHERE "repositories"."name" = $1 LIMIT $2[0m  [["name", "build.shibboleth.net"], ["LIMIT", 1]]
+  [1m[36mTRANSACTION (0.4ms)[0m  [1m[35mBEGIN[0m
+  [1m[36mRepository Exists? (1.8ms)[0m  [1m[34mSELECT 1 AS one FROM "repositories" WHERE "repositories"."name" = $1 LIMIT $2[0m  [["name", "build.shibboleth.net"], ["LIMIT", 1]]
+  [1m[36mRepository Create (5.5ms)[0m  [1m[32mINSERT INTO "repositories" ("name", "url", "ecosystem", "last_indexed_at", "status", "error_message", "package_count", "index_size_bytes", "metadata", "created_at", "updated_at") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING "id"[0m  [["name", "build.shibboleth.net"], ["url", "https://build.shibboleth.net/nexus/content/repositories/releases"], ["ecosystem", "maven"], ["last_indexed_at", nil], ["status", "pending"], ["error_message", nil], ["package_count", 0], ["index_size_bytes", nil], ["metadata", "{}"], ["created_at", "2025-10-31 17:01:42.433943"], ["updated_at", "2025-10-31 17:01:42.433943"]]
+  [1m[36mTRANSACTION (0.6ms)[0m  [1m[35mCOMMIT[0m
+Completed 200 OK in 101ms (Views: 0.3ms | ActiveRecord: 9.3ms (3 queries, 0 cached) | GC: 0.1ms)
+
+
+source=rack-timeout id=381392d9-50dd-4e01-a802-263096d2e343 timeout=15000ms service=122ms state=completed
+  [1m[36mRepository Load (4.0ms)[0m  [1m[34mSELECT "repositories".* FROM "repositories" WHERE "repositories"."id" = $1 LIMIT $2[0m  [["id", 1], ["LIMIT", 1]]
+  [1m[36mTRANSACTION (0.2ms)[0m  [1m[35mBEGIN[0m
+  [1m[36mRepository Update (1.1ms)[0m  [1m[33mUPDATE "repositories" SET "status" = $1, "updated_at" = $2 WHERE "repositories"."id" = $3[0m  [["status", "indexing"], ["updated_at", "2025-10-31 17:01:56.137699"], ["id", 1]]
+  [1m[36mTRANSACTION (8.1ms)[0m  [1m[35mCOMMIT[0m
+Downloading index from https://build.shibboleth.net/nexus/content/repositories/releases/.index/nexus-maven-repository-index.gz
+  [1m[36mTRANSACTION (1.7ms)[0m  [1m[35mBEGIN[0m
+  [1m[36mRepository Update (3.9ms)[0m  [1m[33mUPDATE "repositories" SET "status" = $1, "error_message" = $2, "updated_at" = $3 WHERE "repositories"."id" = $4[0m  [["status", "failed"], ["error_message", "Failed to download index: 302"], ["updated_at", "2025-10-31 17:01:57.041796"], ["id", 1]]
+  [1m[36mTRANSACTION (0.6ms)[0m  [1m[35mCOMMIT[0m
+Failed to index repository 1: Failed to download index: 302
+/Users/andrew/code/ecosystems/nexus/app/services/index_repository_service.rb:53:in 'IndexRepositoryService#download_index'
+/Users/andrew/code/ecosystems/nexus/app/services/index_repository_service.rb:16:in 'IndexRepositoryService#call'
+/Users/andrew/code/ecosystems/nexus/app/sidekiq/index_repository_worker.rb:9:in 'IndexRepositoryWorker#perform'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:227:in 'Sidekiq::Processor#execute_job'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:192:in 'block (4 levels) in Sidekiq::Processor#process'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:180:in 'Sidekiq::Middleware::Chain#traverse'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:183:in 'block in Sidekiq::Middleware::Chain#traverse'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/job/interrupt_handler.rb:9:in 'Sidekiq::Job::InterruptHandler#call'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:182:in 'Sidekiq::Middleware::Chain#traverse'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:183:in 'block in Sidekiq::Middleware::Chain#traverse'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/metrics/tracking.rb:26:in 'Sidekiq::Metrics::ExecutionTracker#track'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/metrics/tracking.rb:136:in 'Sidekiq::Metrics::Middleware#call'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:182:in 'Sidekiq::Middleware::Chain#traverse'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/middleware/chain.rb:173:in 'Sidekiq::Middleware::Chain#invoke'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:191:in 'block (3 levels) in Sidekiq::Processor#process'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:151:in 'block (7 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/job_retry.rb:118:in 'Sidekiq::JobRetry#local'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:150:in 'block (6 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/rails.rb:19:in 'block in Sidekiq::Rails::Reloader#call'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/activesupport-8.0.4/lib/active_support/reloader.rb:77:in 'block in ActiveSupport::Reloader.wrap'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/activesupport-8.0.4/lib/active_support/execution_wrapper.rb:91:in 'ActiveSupport::ExecutionWrapper.wrap'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/activesupport-8.0.4/lib/active_support/reloader.rb:74:in 'ActiveSupport::Reloader.wrap'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/rails.rb:18:in 'Sidekiq::Rails::Reloader#call'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:145:in 'block (5 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:123:in 'Sidekiq::Processor#profile'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:140:in 'block (4 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:288:in 'Sidekiq::Processor#stats'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:139:in 'block (3 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/job_logger.rb:15:in 'Sidekiq::JobLogger#call'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:138:in 'block (2 levels) in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/job_retry.rb:85:in 'Sidekiq::JobRetry#global'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:137:in 'block in Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/job_logger.rb:40:in 'Sidekiq::JobLogger#prepare'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:136:in 'Sidekiq::Processor#dispatch'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:190:in 'block (2 levels) in Sidekiq::Processor#process'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:189:in 'Thread.handle_interrupt'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:189:in 'block in Sidekiq::Processor#process'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:188:in 'Thread.handle_interrupt'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:188:in 'Sidekiq::Processor#process'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:87:in 'Sidekiq::Processor#process_one'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/processor.rb:77:in 'Sidekiq::Processor#run'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/component.rb:38:in 'Sidekiq::Component#watchdog'
+/Users/andrew/.rbenv/versions/3.4.7/lib/ruby/gems/3.4.0/gems/sidekiq-8.0.8/lib/sidekiq/component.rb:47:in 'block in Sidekiq::Component#safe_thread'
+source=rack-timeout id=09d238d9-e019-49e9-ba04-08c3bb13deaa timeout=15000ms state=ready
+Started GET "/sidekiq" for 127.0.0.1 at 2025-10-31 17:02:02 +0000
+source=rack-timeout id=09d238d9-e019-49e9-ba04-08c3bb13deaa timeout=15000ms service=1ms state=active
+  
+RuntimeError (Sidekiq::Web needs a valid Rack session for CSRF protection. If this is a Rails app,
+make sure you mount Sidekiq::Web *inside* your application routes:
+
+
+Rails.application.routes.draw do
+  mount Sidekiq::Web => "/sidekiq"
+  ....
+end
+
+
+If this is a Rails app in API mode, you need to enable sessions.
+
+  https://guides.rubyonrails.org/api_app.html#using-session-middlewares
+
+If this is a bare Rack app, use a session middleware before Sidekiq::Web:
+
+  # first, use IRB to create a shared secret key for sessions and commit it
+  require 'securerandom'; File.open(".session.key", "w") {|f| f.write(SecureRandom.hex(32)) }
+
+  # now use the secret with a session cookie middleware
+  use Rack::Session::Cookie, secret: File.read(".session.key"), same_site: true, max_age: 86400
+  run Sidekiq::Web
+
+):
+  
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:68:in 'Sidekiq::Web::CsrfProtection#session'
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:48:in 'Sidekiq::Web::CsrfProtection#admit'
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:40:in 'Sidekiq::Web::CsrfProtection#call'
+rack (3.2.3) lib/rack/static.rb:162:in 'Rack::Static#call'
+rack (3.2.3) lib/rack/builder.rb:283:in 'Rack::Builder#call'
+sidekiq (8.0.8) lib/sidekiq/web.rb:90:in 'Sidekiq::Web#call'
+sidekiq (8.0.8) lib/sidekiq/web.rb:77:in 'Sidekiq::Web.call'
+actionpack (8.0.4) lib/action_dispatch/routing/mapper.rb:33:in 'block in <class:Constraints>'
+actionpack (8.0.4) lib/action_dispatch/routing/mapper.rb:62:in 'ActionDispatch::Routing::Mapper::Constraints#serve'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:53:in 'block in ActionDispatch::Journey::Router#serve'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:133:in 'block in ActionDispatch::Journey::Router#find_routes'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:126:in 'Array#each'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:126:in 'ActionDispatch::Journey::Router#find_routes'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:34:in 'ActionDispatch::Journey::Router#serve'
+actionpack (8.0.4) lib/action_dispatch/routing/route_set.rb:908:in 'ActionDispatch::Routing::RouteSet#call'
+rack (3.2.3) lib/rack/etag.rb:29:in 'Rack::ETag#call'
+rack (3.2.3) lib/rack/conditional_get.rb:31:in 'Rack::ConditionalGet#call'
+rack (3.2.3) lib/rack/head.rb:15:in 'Rack::Head#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/callbacks.rb:31:in 'block in ActionDispatch::Callbacks#call'
+activesupport (8.0.4) lib/active_support/callbacks.rb:100:in 'ActiveSupport::Callbacks#run_callbacks'
+actionpack (8.0.4) lib/action_dispatch/middleware/callbacks.rb:30:in 'ActionDispatch::Callbacks#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/executor.rb:16:in 'ActionDispatch::Executor#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/actionable_exceptions.rb:18:in 'ActionDispatch::ActionableExceptions#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/debug_exceptions.rb:31:in 'ActionDispatch::DebugExceptions#call'
+web-console (4.2.1) lib/web_console/middleware.rb:132:in 'WebConsole::Middleware#call_app'
+web-console (4.2.1) lib/web_console/middleware.rb:28:in 'block in WebConsole::Middleware#call'
+web-console (4.2.1) lib/web_console/middleware.rb:17:in 'Kernel#catch'
+web-console (4.2.1) lib/web_console/middleware.rb:17:in 'WebConsole::Middleware#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/show_exceptions.rb:32:in 'ActionDispatch::ShowExceptions#call'
+railties (8.0.4) lib/rails/rack/logger.rb:41:in 'Rails::Rack::Logger#call_app'
+railties (8.0.4) lib/rails/rack/logger.rb:29:in 'Rails::Rack::Logger#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/remote_ip.rb:96:in 'ActionDispatch::RemoteIp#call'
+request_store (1.7.0) lib/request_store/middleware.rb:19:in 'RequestStore::Middleware#call'
+rack-timeout (0.7.0) lib/rack/timeout/core.rb:154:in 'block in Rack::Timeout#call'
+rack-timeout (0.7.0) lib/rack/timeout/support/timeout.rb:19:in 'Rack::Timeout::Scheduler::Timeout#timeout'
+rack-timeout (0.7.0) lib/rack/timeout/core.rb:153:in 'Rack::Timeout#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/request_id.rb:34:in 'ActionDispatch::RequestId#call'
+rack (3.2.3) lib/rack/runtime.rb:24:in 'Rack::Runtime#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:61:in 'block in ActionDispatch::ServerTiming#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:26:in 'ActionDispatch::ServerTiming::Subscriber#collect_events'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:60:in 'ActionDispatch::ServerTiming#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/executor.rb:16:in 'ActionDispatch::Executor#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/static.rb:27:in 'ActionDispatch::Static#call'
+rack (3.2.3) lib/rack/sendfile.rb:131:in 'Rack::Sendfile#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/host_authorization.rb:143:in 'ActionDispatch::HostAuthorization#call'
+railties (8.0.4) lib/rails/engine.rb:535:in 'Rails::Engine#call'
+puma (7.1.0) lib/puma/configuration.rb:300:in 'Puma::Configuration::ConfigMiddleware#call'
+puma (7.1.0) lib/puma/request.rb:101:in 'block in Puma::Request#handle_request'
+puma (7.1.0) lib/puma/thread_pool.rb:355:in 'Puma::ThreadPool#with_force_shutdown'
+puma (7.1.0) lib/puma/request.rb:100:in 'Puma::Request#handle_request'
+puma (7.1.0) lib/puma/server.rb:503:in 'Puma::Server#process_client'
+puma (7.1.0) lib/puma/server.rb:262:in 'block in Puma::Server#run'
+puma (7.1.0) lib/puma/thread_pool.rb:182:in 'block in Puma::ThreadPool#spawn_thread'
+source=rack-timeout id=09d238d9-e019-49e9-ba04-08c3bb13deaa timeout=15000ms service=193ms state=completed
+source=rack-timeout id=09da582d-acb8-4694-b87a-789033e9dce3 timeout=15000ms state=ready
+source=rack-timeout id=09da582d-acb8-4694-b87a-789033e9dce3 timeout=15000ms service=2ms state=active
+Started GET "/sidekiq" for 127.0.0.1 at 2025-10-31 17:04:11 +0000
+  
+RuntimeError (Sidekiq::Web needs a valid Rack session for CSRF protection. If this is a Rails app,
+make sure you mount Sidekiq::Web *inside* your application routes:
+
+
+Rails.application.routes.draw do
+  mount Sidekiq::Web => "/sidekiq"
+  ....
+end
+
+
+If this is a Rails app in API mode, you need to enable sessions.
+
+  https://guides.rubyonrails.org/api_app.html#using-session-middlewares
+
+If this is a bare Rack app, use a session middleware before Sidekiq::Web:
+
+  # first, use IRB to create a shared secret key for sessions and commit it
+  require 'securerandom'; File.open(".session.key", "w") {|f| f.write(SecureRandom.hex(32)) }
+
+  # now use the secret with a session cookie middleware
+  use Rack::Session::Cookie, secret: File.read(".session.key"), same_site: true, max_age: 86400
+  run Sidekiq::Web
+
+):
+  
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:68:in 'Sidekiq::Web::CsrfProtection#session'
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:48:in 'Sidekiq::Web::CsrfProtection#admit'
+sidekiq (8.0.8) lib/sidekiq/web/csrf_protection.rb:40:in 'Sidekiq::Web::CsrfProtection#call'
+rack (3.2.3) lib/rack/static.rb:162:in 'Rack::Static#call'
+rack (3.2.3) lib/rack/builder.rb:283:in 'Rack::Builder#call'
+sidekiq (8.0.8) lib/sidekiq/web.rb:90:in 'Sidekiq::Web#call'
+sidekiq (8.0.8) lib/sidekiq/web.rb:77:in 'Sidekiq::Web.call'
+actionpack (8.0.4) lib/action_dispatch/routing/mapper.rb:33:in 'block in <class:Constraints>'
+actionpack (8.0.4) lib/action_dispatch/routing/mapper.rb:62:in 'ActionDispatch::Routing::Mapper::Constraints#serve'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:53:in 'block in ActionDispatch::Journey::Router#serve'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:133:in 'block in ActionDispatch::Journey::Router#find_routes'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:126:in 'Array#each'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:126:in 'ActionDispatch::Journey::Router#find_routes'
+actionpack (8.0.4) lib/action_dispatch/journey/router.rb:34:in 'ActionDispatch::Journey::Router#serve'
+actionpack (8.0.4) lib/action_dispatch/routing/route_set.rb:908:in 'ActionDispatch::Routing::RouteSet#call'
+rack (3.2.3) lib/rack/etag.rb:29:in 'Rack::ETag#call'
+rack (3.2.3) lib/rack/conditional_get.rb:31:in 'Rack::ConditionalGet#call'
+rack (3.2.3) lib/rack/head.rb:15:in 'Rack::Head#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/callbacks.rb:31:in 'block in ActionDispatch::Callbacks#call'
+activesupport (8.0.4) lib/active_support/callbacks.rb:100:in 'ActiveSupport::Callbacks#run_callbacks'
+actionpack (8.0.4) lib/action_dispatch/middleware/callbacks.rb:30:in 'ActionDispatch::Callbacks#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/executor.rb:16:in 'ActionDispatch::Executor#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/actionable_exceptions.rb:18:in 'ActionDispatch::ActionableExceptions#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/debug_exceptions.rb:31:in 'ActionDispatch::DebugExceptions#call'
+web-console (4.2.1) lib/web_console/middleware.rb:132:in 'WebConsole::Middleware#call_app'
+web-console (4.2.1) lib/web_console/middleware.rb:28:in 'block in WebConsole::Middleware#call'
+web-console (4.2.1) lib/web_console/middleware.rb:17:in 'Kernel#catch'
+web-console (4.2.1) lib/web_console/middleware.rb:17:in 'WebConsole::Middleware#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/show_exceptions.rb:32:in 'ActionDispatch::ShowExceptions#call'
+railties (8.0.4) lib/rails/rack/logger.rb:41:in 'Rails::Rack::Logger#call_app'
+railties (8.0.4) lib/rails/rack/logger.rb:29:in 'Rails::Rack::Logger#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/remote_ip.rb:96:in 'ActionDispatch::RemoteIp#call'
+request_store (1.7.0) lib/request_store/middleware.rb:19:in 'RequestStore::Middleware#call'
+rack-timeout (0.7.0) lib/rack/timeout/core.rb:154:in 'block in Rack::Timeout#call'
+rack-timeout (0.7.0) lib/rack/timeout/support/timeout.rb:19:in 'Rack::Timeout::Scheduler::Timeout#timeout'
+rack-timeout (0.7.0) lib/rack/timeout/core.rb:153:in 'Rack::Timeout#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/request_id.rb:34:in 'ActionDispatch::RequestId#call'
+rack (3.2.3) lib/rack/runtime.rb:24:in 'Rack::Runtime#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:61:in 'block in ActionDispatch::ServerTiming#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:26:in 'ActionDispatch::ServerTiming::Subscriber#collect_events'
+actionpack (8.0.4) lib/action_dispatch/middleware/server_timing.rb:60:in 'ActionDispatch::ServerTiming#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/executor.rb:16:in 'ActionDispatch::Executor#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/static.rb:27:in 'ActionDispatch::Static#call'
+rack (3.2.3) lib/rack/sendfile.rb:131:in 'Rack::Sendfile#call'
+actionpack (8.0.4) lib/action_dispatch/middleware/host_authorization.rb:143:in 'ActionDispatch::HostAuthorization#call'
+railties (8.0.4) lib/rails/engine.rb:535:in 'Rails::Engine#call'
+puma (7.1.0) lib/puma/configuration.rb:300:in 'Puma::Configuration::ConfigMiddleware#call'
+puma (7.1.0) lib/puma/request.rb:101:in 'block in Puma::Request#handle_request'
+puma (7.1.0) lib/puma/thread_pool.rb:355:in 'Puma::ThreadPool#with_force_shutdown'
+puma (7.1.0) lib/puma/request.rb:100:in 'Puma::Request#handle_request'
+puma (7.1.0) lib/puma/server.rb:503:in 'Puma::Server#process_client'
+puma (7.1.0) lib/puma/server.rb:262:in 'block in Puma::Server#run'
+puma (7.1.0) lib/puma/thread_pool.rb:182:in 'block in Puma::ThreadPool#spawn_thread'
+source=rack-timeout id=09da582d-acb8-4694-b87a-789033e9dce3 timeout=15000ms service=231ms state=completed
+source=rack-timeout id=bc0f9ffb-1760-4e13-8da8-e8a9522bb7e1 timeout=15000ms state=ready
+source=rack-timeout id=bc0f9ffb-1760-4e13-8da8-e8a9522bb7e1 timeout=15000ms service=0ms state=active
+Started GET "/sidekiq" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=bc0f9ffb-1760-4e13-8da8-e8a9522bb7e1 timeout=15000ms service=62ms state=completed
+source=rack-timeout id=f782c2f3-a9e3-4db7-941d-5989b13979e8 timeout=15000ms state=ready
+source=rack-timeout id=f782c2f3-a9e3-4db7-941d-5989b13979e8 timeout=15000ms service=1ms state=active
+source=rack-timeout id=acdac2b0-3bf8-4a3a-9a76-3df4421369a5 timeout=15000ms state=ready
+Started GET "/sidekiq/stylesheets/style.css" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=7884c3d9-1045-4a34-9b17-d41ab40d6b22 timeout=15000ms state=ready
+Started GET "/sidekiq/javascripts/application.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=acdac2b0-3bf8-4a3a-9a76-3df4421369a5 timeout=15000ms service=1ms state=active
+Started GET "/sidekiq/javascripts/dashboard.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=7884c3d9-1045-4a34-9b17-d41ab40d6b22 timeout=15000ms service=3ms state=active
+source=rack-timeout id=acdac2b0-3bf8-4a3a-9a76-3df4421369a5 timeout=15000ms service=11ms state=completed
+source=rack-timeout id=7884c3d9-1045-4a34-9b17-d41ab40d6b22 timeout=15000ms service=10ms state=completed
+source=rack-timeout id=f782c2f3-a9e3-4db7-941d-5989b13979e8 timeout=15000ms service=12ms state=completed
+source=rack-timeout id=9424f6ef-64fe-4886-96ae-247e2f87205d timeout=15000ms state=ready
+source=rack-timeout id=9424f6ef-64fe-4886-96ae-247e2f87205d timeout=15000ms service=1ms state=active
+Started GET "/sidekiq/javascripts/chart.min.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=5f09b15d-8f28-4ab8-a0bc-d94486c1da96 timeout=15000ms state=ready
+source=rack-timeout id=1e47e74f-d579-4800-8a77-2fd8765bbbda timeout=15000ms state=ready
+source=rack-timeout id=5f09b15d-8f28-4ab8-a0bc-d94486c1da96 timeout=15000ms service=0ms state=active
+Started GET "/sidekiq/javascripts/chartjs-plugin-annotation.min.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=1e47e74f-d579-4800-8a77-2fd8765bbbda timeout=15000ms service=1ms state=active
+Started GET "/sidekiq/javascripts/chartjs-adapter-date-fns.min.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=9424f6ef-64fe-4886-96ae-247e2f87205d timeout=15000ms service=11ms state=completed
+source=rack-timeout id=1e47e74f-d579-4800-8a77-2fd8765bbbda timeout=15000ms service=9ms state=completed
+source=rack-timeout id=5f09b15d-8f28-4ab8-a0bc-d94486c1da96 timeout=15000ms service=9ms state=completed
+source=rack-timeout id=4dd16e1c-addb-4c53-a8b3-b17718c239c3 timeout=15000ms state=ready
+source=rack-timeout id=f1730a60-7f55-40ad-bfd5-45e6fc9c2995 timeout=15000ms state=ready
+source=rack-timeout id=4dd16e1c-addb-4c53-a8b3-b17718c239c3 timeout=15000ms service=1ms state=active
+Started GET "/sidekiq/javascripts/base-charts.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=f1730a60-7f55-40ad-bfd5-45e6fc9c2995 timeout=15000ms service=0ms state=active
+Started GET "/sidekiq/javascripts/dashboard-charts.js" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=4dd16e1c-addb-4c53-a8b3-b17718c239c3 timeout=15000ms service=6ms state=completed
+source=rack-timeout id=f1730a60-7f55-40ad-bfd5-45e6fc9c2995 timeout=15000ms service=5ms state=completed
+source=rack-timeout id=e7f1784c-0cab-4dfb-94db-83015aa08ead timeout=15000ms state=ready
+Started GET "/sidekiq/stats" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=e7f1784c-0cab-4dfb-94db-83015aa08ead timeout=15000ms service=2ms state=active
+source=rack-timeout id=e7f1784c-0cab-4dfb-94db-83015aa08ead timeout=15000ms service=37ms state=completed
+source=rack-timeout id=d7aa3464-1483-4ffa-9d2c-19a92ab0df90 timeout=15000ms state=ready
+source=rack-timeout id=5b4a73b9-eeb6-4316-901f-91489e542b14 timeout=15000ms state=ready
+Started GET "/sidekiq/images/apple-touch-icon.png" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=d7aa3464-1483-4ffa-9d2c-19a92ab0df90 timeout=15000ms service=7ms state=active
+Started GET "/sidekiq/images/favicon.ico" for 127.0.0.1 at 2025-10-31 17:04:16 +0000
+source=rack-timeout id=5b4a73b9-eeb6-4316-901f-91489e542b14 timeout=15000ms service=2ms state=active
+source=rack-timeout id=d7aa3464-1483-4ffa-9d2c-19a92ab0df90 timeout=15000ms service=18ms state=completed
+source=rack-timeout id=5b4a73b9-eeb6-4316-901f-91489e542b14 timeout=15000ms service=12ms state=completed
+source=rack-timeout id=aee3fffb-4b5f-45ca-bd59-09ee382f2d65 timeout=15000ms state=ready
+Started GET "/sidekiq/retries" for 127.0.0.1 at 2025-10-31 17:04:18 +0000
+source=rack-timeout id=aee3fffb-4b5f-45ca-bd59-09ee382f2d65 timeout=15000ms service=3ms state=active
+source=rack-timeout id=aee3fffb-4b5f-45ca-bd59-09ee382f2d65 timeout=15000ms service=57ms state=completed
+source=rack-timeout id=aaa0766d-d9ce-4cd5-8686-e7cb5566d7c9 timeout=15000ms state=ready
+Started GET "/sidekiq/retries" for 127.0.0.1 at 2025-10-31 17:04:20 +0000
+source=rack-timeout id=aaa0766d-d9ce-4cd5-8686-e7cb5566d7c9 timeout=15000ms service=6ms state=active
+source=rack-timeout id=aaa0766d-d9ce-4cd5-8686-e7cb5566d7c9 timeout=15000ms service=62ms state=completed

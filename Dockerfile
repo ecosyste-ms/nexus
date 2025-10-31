@@ -1,0 +1,42 @@
+FROM ruby:3.4.7-alpine
+
+ENV APP_ROOT=/usr/src/app
+ENV DATABASE_PORT=5432
+ENV RUBY_YJIT_ENABLE=1
+ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
+WORKDIR $APP_ROOT
+
+# * Setup system
+# * Install Ruby dependencies
+RUN apk add --update \
+    build-base \
+    netcat-openbsd \
+    git \
+    postgresql-dev \
+    tzdata \
+    curl-dev \
+    libc6-compat \
+    bash \
+    yaml-dev \
+    libffi-dev \
+    jemalloc \
+    docker-cli \
+ && rm -rf /var/cache/apk/*
+
+# Will invalidate cache as soon as the Gemfile changes
+COPY Gemfile Gemfile.lock $APP_ROOT/
+
+RUN bundle config --global frozen 1 \
+ && bundle config set without 'test' \
+ && bundle install --jobs 2
+
+# ========================================================
+# Application layer
+
+# Copy application code
+COPY . $APP_ROOT
+
+RUN bundle exec bootsnap precompile --gemfile app/ lib/
+
+# Startup
+CMD ["bin/docker-start"]
