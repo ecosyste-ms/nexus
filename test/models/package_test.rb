@@ -37,5 +37,13 @@ class PackageTest < ActiveSupport::TestCase
       assert_includes Package.recently_updated, @recent
       assert_not_includes Package.recently_updated, @old
     end
+
+    should "work with chained scopes without ambiguous column errors" do
+      # This tests that table names are properly qualified when joining
+      packages = Package.for_repository("test-repo").recently_updated(1.week.ago)
+
+      assert_includes packages, @recent
+      assert_not_includes packages, @old
+    end
   end
 end

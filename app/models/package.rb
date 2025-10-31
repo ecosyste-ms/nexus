@@ -6,7 +6,7 @@ class Package < ApplicationRecord
   validates :group_id, presence: true
   validates :artifact_id, presence: true
 
-  scope :recently_updated, ->(since = 1.week.ago) { where('last_modified >= ?', since).order(last_modified: :desc) }
+  scope :recently_updated, ->(since = 1.week.ago) { where('packages.last_modified >= ?', since).order('packages.last_modified DESC') }
   scope :for_repository, ->(repository_name) { joins(:repository).where(repositories: { name: repository_name }) }
 
   before_validation :set_name_from_parts, if: -> { name.blank? && group_id.present? && artifact_id.present? }

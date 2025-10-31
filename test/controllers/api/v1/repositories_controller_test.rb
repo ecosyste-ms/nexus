@@ -50,6 +50,34 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  context "GET /api/v1/repositories/:name/recent" do
+    setup do
+      @repo = Repository.create!(name: "test-repo", url: "http://example.com")
+      @package = Package.create!(repository: @repo, name: "org.example:lib", group_id: "org.example", artifact_id: "lib", last_modified: 1.day.ago)
+      @recent_version = Version.create!(package: @package, number: "1.0.0", last_modified: 1.day.ago)
+      @old_version = Version.create!(package: @package, number: "0.9.0", last_modified: 2.weeks.ago)
+    end
+
+    should "return recently updated versions" do
+      get "/api/v1/repositories/test-repo/recent?since=#{1.week.ago.iso8601}"
+      assert_response :success
+
+      json = JSON.parse(response.body)
+      assert_equal 1, json.count
+      assert_equal "org.example:lib", json.first["package"]
+      assert_equal "1.0.0", json.first["version"]
+    end
+
+    should "work without since parameter" do
+      # This was causing the ambiguous column error
+      get "/api/v1/repositories/test-repo/recent"
+      assert_response :success
+
+      json = JSON.parse(response.body)
+      assert json.is_a?(Array)
+    end
+  end
+
   context "POST /api/v1/sync_repositories" do
     should "create new repositories" do
       repos_data = [
