@@ -46,7 +46,13 @@ class IndexRepositoryService
 
     Rails.logger.info "Downloading index from #{url}"
 
-    response = Faraday.get(url) do |req|
+    conn = Faraday.new do |f|
+      f.request :retry, max: 2, interval: 0.5
+      f.response :follow_redirects
+      f.adapter Faraday.default_adapter
+    end
+
+    response = conn.get(url) do |req|
       req.options.timeout = 300
     end
 
@@ -57,15 +63,11 @@ class IndexRepositoryService
   end
 
   def export_index(work_dir, gz_file)
-    return skip_docker_export(work_dir) unless docker_enabled?
-
     Rails.logger.info "Exporting index using Docker"
 
-    export_dir = File.join(work_dir, 'export')
-    FileUtils.mkdir_p(export_dir)
-
-    # Move gz file to work directory root for Docker
-    FileUtils.cp(gz_file, File.join(work_dir, 'nexus-maven-repository-index.gz'))
+    # Don't pre-create export directory - Docker script checks for it and skips if exists
+    # gz_file is already in the correct location (work_dir/nexus-maven-repository-index.gz)
+    # Docker expects this file at /work/nexus-maven-repository-index.gz
 
     cmd = [
       'docker', 'run', '--rm',
@@ -83,20 +85,11 @@ class IndexRepositoryService
     Rails.logger.info "Docker export completed: #{stdout}"
 
     # Find the .fld file in the export directory
+    export_dir = File.join(work_dir, 'export')
     fld_files = Dir.glob(File.join(export_dir, '*.fld'))
     raise "No .fld file found in export directory" if fld_files.empty?
 
     fld_files.first
-  end
-
-  def skip_docker_export(work_dir)
-    # For development without Docker, create a mock .fld file
-    Rails.logger.warn "Docker disabled, skipping export"
-    export_dir = File.join(work_dir, 'export')
-    FileUtils.mkdir_p(export_dir)
-    mock_file = File.join(export_dir, 'mock.fld')
-    File.write(mock_file, "doc 0\n")
-    mock_file
   end
 
   def parse_index(fld_file)
@@ -138,9 +131,5 @@ class IndexRepositoryService
 
   def keep_files?
     ENV['KEEP_INDEX_FILES'] == 'true'
-  end
-
-  def docker_enabled?
-    ENV.fetch('DOCKER_ENABLED', 'true') == 'true'
   end
 end

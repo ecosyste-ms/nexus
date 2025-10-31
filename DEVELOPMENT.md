@@ -89,7 +89,6 @@ The application uses the following environment variables:
 **Configuration:**
 - `INDEX_RETENTION_DAYS` - How long to keep downloaded indexes (default: 7)
 - `REINDEX_INTERVAL_HOURS` - How often to re-index repositories (default: 24)
-- `DOCKER_ENABLED` - Whether to use Docker for parsing (default: true)
 - `KEEP_INDEX_FILES` - Whether to keep index files after processing (default: false)
 
 **Monitoring:**
@@ -228,10 +227,6 @@ The `u` field contains: `groupId|artifactId|version|classifier|packaging`
 - Stores individual package versions
 - Tracks release timestamps
 - Belongs to a package
-
-## Development Without Docker
-
-For local development without Docker installed, set `DOCKER_ENABLED=false` in your `.env.development` file. This will skip the Docker export step and allow you to test the application without the maven-index-exporter container.
 
 ## Deployment
 

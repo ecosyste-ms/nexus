@@ -14,7 +14,6 @@ services:
       - POSTGRES_PASSWORD=development
       - POSTGRES_HOST=database.service.nexus.internal
       - REDIS_URL=redis://redis.service.nexus.internal:6379/0
-      - DOCKER_ENABLED=false
     networks:
       - internal
     depends_on:
