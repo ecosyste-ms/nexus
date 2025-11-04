@@ -62,6 +62,22 @@ Running rake tasks in docker follows a similar pattern:
 docker-compose exec app rake db:seed
 ```
 
+#### Persistent Index Cache
+
+The Docker setup includes a persistent volume for Maven index files (`maven_indexes`), which significantly speeds up re-indexing operations for large repositories. Downloaded `.gz` files and exported `.fld` files are retained in this volume between container restarts.
+
+To clear the cache volume:
+
+```bash
+docker-compose down -v
+```
+
+Note: This will also remove your database data. To only clear the index cache:
+
+```bash
+docker volume rm nexus_maven_indexes
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -124,13 +140,14 @@ Background tasks are handled by [Sidekiq](https://github.com/mperham/sidekiq), t
 - Triggered manually via API or by SyncAllRepositoriesWorker
 
 **SyncAllRepositoriesWorker**
-- Runs daily (configured in config/sidekiq.yml)
+- Runs daily at 1 AM (configured in app.json)
 - Queues IndexRepositoryWorker for all repositories that need reindexing
 - A repository needs reindexing if it has never been indexed or was last indexed more than REINDEX_INTERVAL_HOURS ago
 
 **CleanupOldIndexesWorker**
-- Runs daily at 2 AM
+- Available for manual cleanup if needed
 - Removes downloaded index files older than INDEX_RETENTION_DAYS
+- Not scheduled by default - cleanup happens automatically per repository after indexing to preserve cache
 
 ### Running Sidekiq
 
@@ -237,14 +254,112 @@ A container-based deployment is highly recommended, we use [dokku.com](https://d
 - PostgreSQL database
 - Redis instance
 - Docker socket access (for maven-index-exporter)
-- Scheduled job runner for Sidekiq periodic tasks
+- Persistent storage for Maven index cache
+- Scheduled job runner for Sidekiq periodic tasks (configured via app.json)
+
+### Dokku Deployment
+
+#### Initial Setup
+
+Create the Dokku app:
+
+```bash
+dokku apps:create nexus
+```
+
+#### Configure Persistent Storage for Index Cache
+
+Create a storage directory and mount it to persist downloaded Maven indexes between deployments:
+
+```bash
+# Create storage directory with proper permissions
+dokku storage:ensure-directory nexus
+
+# Mount the storage for Maven indexes
+dokku storage:mount nexus /var/lib/dokku/data/storage/nexus:/usr/src/app/tmp/maven-indexes
+
+# Verify the mount
+dokku storage:list nexus
+```
+
+This persistent storage significantly improves performance for large repositories:
+- Downloaded `.gz` files are cached and reused if unchanged
+- Unpacked `indexes/` directories are reused, skipping expensive decompression
+- Exported `.fld` files are reused, skipping the export step
+
+The maven-index-exporter Docker script (lines 50-68 in extract_indexes.sh) automatically detects and reuses these cached files.
+
+#### Mount Docker Socket
+
+The app needs access to the Docker socket to run the maven-index-exporter:
+
+```bash
+dokku storage:mount nexus /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+#### Database and Redis
+
+```bash
+# Install plugins (if not already installed)
+dokku plugin:install https://github.com/dokku/dokku-postgres.git
+dokku plugin:install https://github.com/dokku/dokku-redis.git
+
+# Create services
+dokku postgres:create nexus-db
+dokku redis:create nexus-redis
+
+# Link to app
+dokku postgres:link nexus-db nexus
+dokku redis:link nexus-redis nexus
+```
+
+#### Restart After Mounting Storage
+
+After mounting storage, restart the app for changes to take effect:
+
+```bash
+dokku ps:restart nexus
+```
+
+#### Environment Variables
+
+Set required environment variables:
+
+```bash
+dokku config:set nexus RAILS_ENV=production
+dokku config:set nexus RAILS_SERVE_STATIC_FILES=true
+dokku config:set nexus RAILS_LOG_TO_STDOUT=true
+dokku config:set nexus INDEX_RETENTION_DAYS=30
+dokku config:set nexus REINDEX_INTERVAL_HOURS=168
+```
+
+#### Deploy
+
+```bash
+git remote add dokku dokku@your-server:nexus
+git push dokku main
+```
+
+#### Run Migrations
+
+```bash
+dokku run nexus bundle exec rake db:migrate
+```
+
+#### Scheduled Jobs
+
+Cron jobs are configured in `app.json` and will be automatically set up during deployment:
+- `sync_all_repositories` runs daily at 1 AM
+
+Note: Index cleanup is handled automatically per repository based on `INDEX_RETENTION_DAYS` after each indexing operation, so no separate cleanup cron job is needed.
 
 ### Environment Setup
 
 1. Set all required environment variables
 2. Run database migrations: `bundle exec rake db:migrate`
 3. Start web server and Sidekiq workers
-4. Configure scheduled jobs (SyncAllRepositoriesWorker, CleanupOldIndexesWorker)
+4. Configure scheduled jobs (defined in app.json)
+5. Mount persistent storage for Maven index cache
 
 ### Initial Data
 

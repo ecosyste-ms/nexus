@@ -1,0 +1,8 @@
+{
+  "cron": [
+    {
+      "command": "bundle exec rake sync_all_repositories",
+      "schedule": "0 1 * * *"
+    }
+  ]
+}

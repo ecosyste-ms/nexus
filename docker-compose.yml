@@ -21,6 +21,7 @@ services:
       - redis.service.nexus.internal
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - maven_indexes:/usr/src/app/tmp/maven-indexes
 
   database.service.nexus.internal:
     image: postgres:14.1-alpine
@@ -38,6 +39,7 @@ services:
 
 volumes:
   pg_data:
+  maven_indexes:
 
 networks:
   internal:
