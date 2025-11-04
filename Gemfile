@@ -20,7 +20,7 @@ gem "faraday"
 gem "faraday-retry"
 gem "faraday-follow_redirects"
 gem "oj"
-gem "pagy"
+gem "pagy", "~> 9.4.0"
 gem "pghero"
 gem "pg_query"
 gem 'rack-cors'

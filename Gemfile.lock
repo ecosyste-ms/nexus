@@ -265,7 +265,7 @@ DEPENDENCIES
   lograge
   mocha
   oj
-  pagy
+  pagy (~> 9.4.0)
   pg
   pg_query
   pghero
