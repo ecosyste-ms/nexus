@@ -22,7 +22,6 @@ gem "faraday-follow_redirects"
 gem "oj"
 gem "pagy", "~> 9.4.0"
 gem "pghero"
-gem "pg_query"
 gem 'rack-cors'
 gem "lograge"
 gem 'rack-timeout'
@@ -38,6 +37,7 @@ group :test do
   gem "webmock"
   gem "mocha"
   gem "rails-controller-testing"
+  gem "minitest", "~> 5"
 end
 
 group :development, :test do
