@@ -8,7 +8,7 @@ First things first, you'll need to fork and clone the repository to your local m
 
 The project uses Ruby on Rails which have a number of system dependencies you'll need to install.
 
-- [ruby 3.4.7](https://www.ruby-lang.org/en/documentation/installation/)
+- [ruby 4.0.0](https://www.ruby-lang.org/en/documentation/installation/)
 - [postgresql 14](https://www.postgresql.org/download/)
 - [redis 6+](https://redis.io/download/)
 - [Docker](https://docs.docker.com/get-docker/) (for [maven-index-exporter](https://github.com/ecosyste-ms/maven-index-exporter))
