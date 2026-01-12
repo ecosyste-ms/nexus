@@ -193,7 +193,7 @@ GEM
       logger (>= 1.7.0)
       rack (>= 3.2.0)
       redis-client (>= 0.26.0)
-    sidekiq-unique-jobs (8.0.12)
+    sidekiq-unique-jobs (8.0.13)
       concurrent-ruby (~> 1.0, >= 1.0.5)
       sidekiq (>= 7.0.0, < 9.0.0)
       thor (>= 1.0, < 3.0)
@@ -346,7 +346,7 @@ CHECKSUMS
   shoulda-context (3.0.0.rc1) sha256=6e0d9d52ab798c13bc2b490c8537d4bf30cfd318a1ea839c39a66d1d293c6a1a
   shoulda-matchers (7.0.1) sha256=b4bfd8744c10e0a36c8ac1a687f921ee7e25ed529e50488d61b79a8688749c77
   sidekiq (8.1.0) sha256=6bde5eaee9e4d7b1121e97ebd585273627fb32b1f870a47893723572479ad1e4
-  sidekiq-unique-jobs (8.0.12) sha256=000a00976be4411a4999723086ebcad8d9b7e5ddfdfe01b77c5c6b98de3115fe
+  sidekiq-unique-jobs (8.0.13) sha256=b7ded4264a54b6eb4154f34aab513ddcdcbf4bf0994740fb96a3e10a95e4ae9b
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
   timeout (0.6.0) sha256=6d722ad619f96ee383a0c557ec6eb8c4ecb08af3af62098a0be5057bf00de1af
