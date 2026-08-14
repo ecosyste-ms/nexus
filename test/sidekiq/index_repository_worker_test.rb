@@ -5,6 +5,6 @@ class IndexRepositoryWorkerTest < ActiveSupport::TestCase
     options = IndexRepositoryWorker.get_sidekiq_options
 
     assert_equal :until_and_while_executing, options["lock"]
-    assert_equal 12.hours.to_i, options["lock_ttl"]
+    assert_equal 48.hours.to_i, options["lock_ttl"]
   end
 end

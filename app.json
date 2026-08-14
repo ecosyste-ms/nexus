@@ -1,7 +1,7 @@
 {
   "cron": [
     {
-      "command": "bundle exec rake sync_all_repositories",
+      "command": "bundle exec rake registries:index_all",
       "schedule": "0 1 * * *"
     }
   ]

@@ -10,24 +10,39 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_13_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_14_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "maven_artifacts", id: false, force: :cascade do |t|
+    t.string "artifact_id", null: false
+    t.string "classifier", default: "", null: false
+    t.string "extension", default: "", null: false
+    t.string "group_id", null: false
+    t.uuid "index_run_id", null: false
+    t.datetime "last_modified"
+    t.string "packaging"
+    t.bigint "repository_id", null: false
+    t.string "version", null: false
+    t.index ["repository_id", "group_id", "artifact_id", "version", "classifier", "extension"], name: "index_maven_artifacts_on_identity", unique: true
+    t.index ["repository_id", "index_run_id"], name: "index_maven_artifacts_on_repository_id_and_index_run_id"
+  end
 
   create_table "packages", force: :cascade do |t|
     t.string "artifact_id", null: false
     t.datetime "created_at", null: false
     t.string "group_id", null: false
+    t.uuid "index_run_id"
     t.datetime "last_modified"
     t.jsonb "metadata", default: {}
     t.string "name", null: false
     t.bigint "repository_id", null: false
     t.datetime "updated_at", null: false
-    t.string "index_run_id"
     t.index ["artifact_id"], name: "index_packages_on_artifact_id"
     t.index ["group_id"], name: "index_packages_on_group_id"
-    t.index ["repository_id", "index_run_id"], name: "index_packages_on_repository_id_and_index_run_id"
     t.index ["last_modified"], name: "index_packages_on_last_modified"
+    t.index ["repository_id", "group_id", "artifact_id"], name: "index_packages_on_repository_id_and_group_id_and_artifact_id"
+    t.index ["repository_id", "index_run_id"], name: "index_packages_on_repository_id_and_index_run_id"
     t.index ["repository_id", "name"], name: "index_packages_on_repository_id_and_name", unique: true
     t.index ["repository_id"], name: "index_packages_on_repository_id"
   end
@@ -37,9 +52,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_150000) do
     t.string "ecosystem", default: "maven"
     t.text "error_message"
     t.string "index_chain_id"
+    t.uuid "index_run_id"
     t.bigint "index_size_bytes"
     t.string "index_timestamp"
-    t.integer "last_incremental_chunk"
+    t.bigint "last_incremental_chunk"
     t.datetime "last_indexed_at"
     t.jsonb "metadata", default: {}
     t.string "name", null: false
@@ -54,19 +70,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_150000) do
 
   create_table "versions", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.uuid "index_run_id"
     t.datetime "last_modified"
     t.jsonb "metadata", default: {}
     t.string "number", null: false
     t.bigint "package_id", null: false
     t.string "packaging"
     t.datetime "updated_at", null: false
-    t.string "index_run_id"
     t.index ["last_modified"], name: "index_versions_on_last_modified"
     t.index ["package_id", "index_run_id"], name: "index_versions_on_package_id_and_index_run_id"
     t.index ["package_id", "number"], name: "index_versions_on_package_id_and_number", unique: true
     t.index ["package_id"], name: "index_versions_on_package_id"
   end
 
+  add_foreign_key "maven_artifacts", "repositories"
   add_foreign_key "packages", "repositories"
   add_foreign_key "versions", "packages"
 end

@@ -26,6 +26,7 @@ class Repository < ApplicationRecord
   ].freeze
 
   has_many :packages, dependent: :destroy
+  has_many :maven_artifacts, dependent: :delete_all
 
   before_validation :normalize_name
 
@@ -45,10 +46,6 @@ class Repository < ApplicationRecord
   scope :failed, -> { where(status: 'failed') }
   scope :recently_indexed, -> { where.not(last_indexed_at: nil).order(last_indexed_at: :desc) }
 
-  def index_url
-    "#{url.delete_suffix('/')}/.index/nexus-maven-repository-index.gz"
-  end
-
   def needs_reindex?
     last_indexed_at.nil? || last_indexed_at < ENV.fetch('REINDEX_INTERVAL_HOURS', 24).to_i.hours.ago
   end
@@ -57,14 +54,14 @@ class Repository < ApplicationRecord
     update!(status: 'indexing', error_message: nil)
   end
 
-  def mark_as_completed!(package_count: nil, index_size: nil)
+  def mark_as_completed!(package_count: nil)
     updates = {
       status: 'completed',
       last_indexed_at: Time.current,
-      error_message: nil
+      error_message: nil,
+      index_size_bytes: nil
     }
     updates[:package_count] = package_count if package_count
-    updates[:index_size_bytes] = index_size if index_size
     update!(updates)
   end
 
@@ -91,6 +88,19 @@ class Repository < ApplicationRecord
 
   def normalize_name
     self.name = self.class.normalize_name_value(name)
+  end
+
+  def nexus_cursor
+    cursor = metadata.to_h['nexus_cursor']
+    cursor if cursor.is_a?(Hash)
+  end
+
+  def reset_index_state
+    self.metadata = metadata.to_h.except('nexus_cursor')
+    self.index_timestamp = nil
+    self.index_chain_id = nil
+    self.last_incremental_chunk = nil
+    self.index_run_id = nil
   end
 
   def self.normalize_name_value(name)

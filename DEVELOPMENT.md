@@ -11,7 +11,7 @@ The project uses Ruby on Rails which have a number of system dependencies you'll
 - [ruby 4.0.6](https://www.ruby-lang.org/en/documentation/installation/)
 - [postgresql 14](https://www.postgresql.org/download/)
 - [redis 6+](https://redis.io/download/)
-- [Docker](https://docs.docker.com/get-docker/) (for [maven-index-exporter](https://github.com/ecosyste-ms/maven-index-exporter))
+- The [`nexus`](https://github.com/git-pkgs/nexus) command on `PATH`
 
 You will then need to set some configuration environment variables. Copy `.env.example` to `.env.development` and customise the values to suit your local setup.
 
@@ -40,43 +40,7 @@ You can then load up [http://localhost:3000/health](http://localhost:3000/health
 
 ### Docker
 
-Alternatively you can use the existing docker configuration files to run the app in a container.
-
-Run this command from the root directory of the project to start the service.
-
-```bash
-docker-compose up --build
-```
-
-You can then load up [http://localhost:3000/health](http://localhost:3000/health) to verify the service is running.
-
-For access the rails console use the following command:
-
-```bash
-docker-compose exec app rails console
-```
-
-Running rake tasks in docker follows a similar pattern:
-
-```bash
-docker-compose exec app rake db:seed
-```
-
-#### Persistent Index Cache
-
-The Docker setup includes a persistent volume for Maven index files (`maven_indexes`), which significantly speeds up re-indexing operations for large repositories. Downloaded `.gz` files and exported `.fld` files are retained in this volume between container restarts.
-
-To clear the cache volume:
-
-```bash
-docker-compose down -v
-```
-
-Note: This will also remove your database data. To only clear the index cache:
-
-```bash
-docker volume rm nexus_maven_indexes
-```
+The production Dockerfile builds a pinned revision of `git-pkgs/nexus` and copies the static binary to `/usr/local/bin/nexus`. Set the `NEXUS_REVISION` build argument when updating the pinned version.
 
 ## Configuration
 
@@ -104,9 +68,10 @@ The application uses the following environment variables:
 - `PACKAGES_ECOSYSTE_MS_API_KEY` - API key for authentication
 
 **Configuration:**
-- `INDEX_RETENTION_DAYS` - How long to keep downloaded indexes (default: 7)
 - `REINDEX_INTERVAL_HOURS` - How often to re-index repositories (default: 24)
-- `KEEP_INDEX_FILES` - Whether to keep index files after processing (default: false)
+- `INDEX_JOB_LOCK_TTL_HOURS` - How long one repository remains locked for indexing (default: 48)
+- `NEXUS_BINARY` - Path to the `nexus` command (default: `nexus`)
+- `NEXUS_ALLOW_PRIVATE` - Pass `--allow-private` to the command when set to `true`
 
 **Monitoring:**
 - `APPSIGNAL_PUSH_API_KEY` - AppSignal API key (optional)
@@ -137,18 +102,13 @@ Background tasks are handled by [Sidekiq](https://github.com/mperham/sidekiq), t
 
 **IndexRepositoryWorker**
 - Indexes a single repository
-- Downloads the index, parses it with Docker, and saves packages/versions
+- Streams `nexus sync` output into PostgreSQL and saves each verified checkpoint
 - Triggered manually via API or by SyncAllRepositoriesWorker
 
 **SyncAllRepositoriesWorker**
 - Runs daily at 1 AM (configured in app.json)
 - Queues IndexRepositoryWorker for all repositories that need reindexing
 - A repository needs reindexing if it has never been indexed or was last indexed more than REINDEX_INTERVAL_HOURS ago
-
-**CleanupOldIndexesWorker**
-- Available for manual cleanup if needed
-- Removes downloaded index files older than INDEX_RETENTION_DAYS
-- Not scheduled by default - cleanup happens automatically per repository after indexing to preserve cache
 
 ### Running Sidekiq
 
@@ -205,36 +165,31 @@ Syncs repository list from packages.ecosyste.ms. Expects JSON array of repositor
 
 ### Maven Index Processing Flow
 
-1. **Download**: Download `.index/nexus-maven-repository-index.gz` from repository
-2. **Export**: Run Docker container `ghcr.io/ecosyste-ms/maven-index-exporter` to convert to .fld format
-3. **Parse**: Parse .fld file to extract package and version data
-4. **Save**: Store packages and versions in PostgreSQL
-5. **Cleanup**: Remove temporary files after processing (respects INDEX_RETENTION_DAYS)
+1. Run `nexus sync` with the repository URL and the last committed cursor.
+2. Stream artifact events into a temporary PostgreSQL table with `COPY`.
+3. Merge artifact, package, and version state when the command emits a verified checkpoint.
+4. Save the checkpoint in the same transaction as its events.
 
 ### File Format
 
-The .fld file format contains documents with fields:
+The command writes newline-delimited JSON:
 
+```json
+{"type":"sync","mode":"incremental","index_id":"releases","from":41,"to":42}
+{"type":"add","group_id":"org.opensaml","artifact_id":"xmltooling","version":"1.4.6","extension":"jar"}
+{"type":"checkpoint","cursor":{"index_id":"releases","chain_id":"1234","last_incremental":42,"timestamp":"2026-08-14T10:00:00Z"}}
 ```
-doc 0
-  field 0
-    name u
-    type string
-    value org.opensaml|xmltooling|1.4.6|NA|jar
-  field 1
-    name m
-    type string
-    value 1761808009306
-```
-
-The `u` field contains: `groupId|artifactId|version|classifier|packaging`
 
 ### Database Schema
 
 **repositories**
 - Stores Maven repository metadata
-- Tracks indexing status and statistics
+- Tracks indexing status, the committed cursor, and statistics
 - Has many packages
+
+**maven_artifacts**
+- Stores classifier and extension identities from the index
+- Supports exact incremental additions and removals
 
 **packages**
 - Stores unique packages per repository
@@ -254,8 +209,6 @@ A container-based deployment is highly recommended, we use [dokku.com](https://d
 
 - PostgreSQL database
 - Redis instance
-- Docker socket access (for maven-index-exporter)
-- Persistent storage for Maven index cache
 - Scheduled job runner for Sidekiq periodic tasks (configured via app.json)
 
 ### Dokku Deployment
@@ -266,36 +219,6 @@ Create the Dokku app:
 
 ```bash
 dokku apps:create nexus
-```
-
-#### Configure Persistent Storage for Index Cache
-
-Create a storage directory and mount it to persist downloaded Maven indexes between deployments:
-
-```bash
-# Create storage directory with proper permissions
-dokku storage:ensure-directory nexus
-
-# Mount the storage for Maven indexes
-dokku storage:mount nexus /var/lib/dokku/data/storage/nexus:/usr/src/app/tmp/maven-indexes
-
-# Verify the mount
-dokku storage:list nexus
-```
-
-This persistent storage significantly improves performance for large repositories:
-- Downloaded `.gz` files are cached and reused if unchanged
-- Unpacked `indexes/` directories are reused, skipping expensive decompression
-- Exported `.fld` files are reused, skipping the export step
-
-The maven-index-exporter Docker script (lines 50-68 in extract_indexes.sh) automatically detects and reuses these cached files.
-
-#### Mount Docker Socket
-
-The app needs access to the Docker socket to run the maven-index-exporter:
-
-```bash
-dokku storage:mount nexus /var/run/docker.sock:/var/run/docker.sock:ro
 ```
 
 #### Database and Redis
@@ -314,14 +237,6 @@ dokku postgres:link nexus-db nexus
 dokku redis:link nexus-redis nexus
 ```
 
-#### Restart After Mounting Storage
-
-After mounting storage, restart the app for changes to take effect:
-
-```bash
-dokku ps:restart nexus
-```
-
 #### Environment Variables
 
 Set required environment variables:
@@ -330,7 +245,6 @@ Set required environment variables:
 dokku config:set nexus RAILS_ENV=production
 dokku config:set nexus RAILS_SERVE_STATIC_FILES=true
 dokku config:set nexus RAILS_LOG_TO_STDOUT=true
-dokku config:set nexus INDEX_RETENTION_DAYS=30
 dokku config:set nexus REINDEX_INTERVAL_HOURS=168
 ```
 
@@ -339,6 +253,7 @@ dokku config:set nexus REINDEX_INTERVAL_HOURS=168
 ```bash
 git remote add dokku dokku@your-server:nexus
 git push dokku main
+dokku ps:scale nexus web=1 worker=1
 ```
 
 #### Run Migrations
@@ -350,9 +265,7 @@ dokku run nexus bundle exec rake db:migrate
 #### Scheduled Jobs
 
 Cron jobs are configured in `app.json` and will be automatically set up during deployment:
-- `sync_all_repositories` runs daily at 1 AM
-
-Note: Index cleanup is handled automatically per repository based on `INDEX_RETENTION_DAYS` after each indexing operation, so no separate cleanup cron job is needed.
+- `registries:index_all` runs daily at 1 AM
 
 ### Environment Setup
 
@@ -360,7 +273,6 @@ Note: Index cleanup is handled automatically per repository based on `INDEX_RETE
 2. Run database migrations: `bundle exec rake db:migrate`
 3. Start web server and Sidekiq workers
 4. Configure scheduled jobs (defined in app.json)
-5. Mount persistent storage for Maven index cache
 
 ### Initial Data
 
@@ -386,21 +298,15 @@ The application includes:
 
 ## Troubleshooting
 
-### Docker Issues
+### Nexus Command Issues
 
-If you encounter Docker-related errors:
-1. Verify Docker is installed and running: `docker --version`
-2. Check Docker socket permissions
-3. Test the maven-index-exporter manually:
-   ```bash
-   docker run -v /tmp/work:/work ghcr.io/ecosyste-ms/maven-index-exporter
-   ```
+If the index command cannot start, run `nexus sync -h` in the same environment as the Sidekiq worker and check `NEXUS_BINARY`.
 
 ### Index Download Failures
 
 If repository indexing fails:
 1. Check the repository URL is correct
-2. Verify the repository has a Nexus index at `.index/nexus-maven-repository-index.gz`
+2. Verify the repository has a Nexus properties file at `.index/nexus-maven-repository-index.properties`
 3. Check the error_message field on the repository record
 4. Review Sidekiq logs for detailed error information
 
@@ -409,5 +315,5 @@ If repository indexing fails:
 If you experience memory issues:
 1. Reduce Sidekiq concurrency in config/sidekiq.yml
 2. Increase REINDEX_INTERVAL_HOURS to reduce frequency
-3. Lower INDEX_RETENTION_DAYS to clean up files more frequently
-4. Consider processing fewer repositories simultaneously
+3. Process fewer large repositories simultaneously
+4. Check PostgreSQL temporary disk usage during full imports

@@ -163,7 +163,17 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
         name: "existing-repo",
         url: "https://old.example.com",
         status: "completed",
-        last_indexed_at: 1.hour.ago
+        last_indexed_at: 1.hour.ago,
+        index_timestamp: "2026-08-14T10:00:00Z",
+        index_chain_id: "old-chain",
+        last_incremental_chunk: 12,
+        index_run_id: "26de7823-1538-4d5f-aa2a-8ea84e85d738",
+        metadata: {
+          "nexus_cursor" => {
+            "index_id" => "old-index",
+            "timestamp" => "2026-08-14T10:00:00Z"
+          }
+        }
       )
       IndexRepositoryWorker.expects(:perform_async).with(repository.id).once
 
@@ -174,6 +184,8 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_equal "https://new.example.com", repository.reload.url
       assert_equal "pending", repository.status
+      assert_nil repository.nexus_cursor
+      assert_nil repository.index_run_id
     end
   end
 

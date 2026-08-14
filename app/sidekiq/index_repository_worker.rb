@@ -4,7 +4,7 @@ class IndexRepositoryWorker
   sidekiq_options queue: :default,
                   retry: 3,
                   lock: :until_and_while_executing,
-                  lock_ttl: 12.hours.to_i
+                  lock_ttl: ENV.fetch('INDEX_JOB_LOCK_TTL_HOURS', 48).to_i.hours.to_i
 
   def perform(repository_id)
     repository = Repository.find(repository_id)

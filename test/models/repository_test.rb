@@ -53,6 +53,7 @@ class RepositoryTest < ActiveSupport::TestCase
 
   context "associations" do
     should have_many(:packages).dependent(:destroy)
+    should have_many(:maven_artifacts).dependent(:delete_all)
   end
 
   context "scopes" do
@@ -71,19 +72,6 @@ class RepositoryTest < ActiveSupport::TestCase
     should "return completed repositories" do
       assert_includes Repository.completed, @completed
       assert_not_includes Repository.completed, @pending
-    end
-  end
-
-  context "#index_url" do
-    should "return the correct index URL" do
-      repo = Repository.new(url: "https://build.shibboleth.net/nexus/content/repositories/releases")
-      assert_equal "https://build.shibboleth.net/nexus/content/repositories/releases/.index/nexus-maven-repository-index.gz", repo.index_url
-    end
-
-    should "avoid a double slash when the repository URL ends with a slash" do
-      repo = Repository.new(url: "https://repo.example.com/releases/")
-
-      assert_equal "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz", repo.index_url
     end
   end
 
@@ -116,10 +104,11 @@ class RepositoryTest < ActiveSupport::TestCase
     end
 
     should "mark as completed" do
-      @repo.mark_as_completed!(package_count: 100, index_size: 1000)
+      @repo.update!(index_size_bytes: 1000)
+      @repo.mark_as_completed!(package_count: 100)
       assert_equal "completed", @repo.status
       assert_equal 100, @repo.package_count
-      assert_equal 1000, @repo.index_size_bytes
+      assert_nil @repo.index_size_bytes
       assert_not_nil @repo.last_indexed_at
     end
 
@@ -128,6 +117,33 @@ class RepositoryTest < ActiveSupport::TestCase
       @repo.mark_as_failed!(error)
       assert_equal "failed", @repo.status
       assert_equal "Test error", @repo.error_message
+    end
+  end
+
+  context "index state" do
+    should "read the nexus cursor from repository metadata" do
+      cursor = { "index_id" => "central", "timestamp" => "2026-08-14T10:00:00Z" }
+      repository = Repository.new(metadata: { "nexus_cursor" => cursor })
+
+      assert_equal cursor, repository.nexus_cursor
+    end
+
+    should "clear the cursor and full index run when the source changes" do
+      repository = Repository.new(
+        metadata: { "nexus_cursor" => { "index_id" => "old" }, "other" => true },
+        index_timestamp: "2026-08-14T10:00:00Z",
+        index_chain_id: "old-chain",
+        last_incremental_chunk: 12,
+        index_run_id: "26de7823-1538-4d5f-aa2a-8ea84e85d738"
+      )
+
+      repository.reset_index_state
+
+      assert_equal({ "other" => true }, repository.metadata)
+      assert_nil repository.index_timestamp
+      assert_nil repository.index_chain_id
+      assert_nil repository.last_incremental_chunk
+      assert_nil repository.index_run_id
     end
   end
 end

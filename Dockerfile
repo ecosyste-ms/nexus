@@ -1,3 +1,10 @@
+ARG NEXUS_REVISION=v0.1.1
+
+FROM golang:1.26.6-alpine AS nexus-builder
+
+ARG NEXUS_REVISION
+RUN GOBIN=/out CGO_ENABLED=0 go install github.com/git-pkgs/nexus/cmd/nexus@${NEXUS_REVISION}
+
 FROM ruby:4.0.6-alpine
 
 ENV APP_ROOT=/usr/src/app
@@ -20,7 +27,7 @@ RUN apk add --update \
     yaml-dev \
     libffi-dev \
     jemalloc \
-    docker-cli \
+    ca-certificates \
  && rm -rf /var/cache/apk/*
 
 # Will invalidate cache as soon as the Gemfile changes
@@ -35,8 +42,10 @@ RUN bundle config --global frozen 1 \
 
 # Copy application code
 COPY . $APP_ROOT
+COPY --from=nexus-builder /out/nexus /usr/local/bin/nexus
 
 RUN bundle exec bootsnap precompile --gemfile app/ lib/
+RUN nexus sync -h >/dev/null
 
 # Startup
 CMD ["bin/docker-start"]

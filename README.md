@@ -7,10 +7,10 @@ This project is part of [Ecosyste.ms](https://ecosyste.ms): Tools and open datas
 ## Overview
 
 Nexus.ecosyste.ms indexes Maven repositories by:
-1. Downloading `.index/nexus-maven-repository-index.gz` files from Maven repositories
-2. Parsing them using the [maven-index-exporter](https://github.com/ecosyste-ms/maven-index-exporter) Docker container
-3. Extracting package names (groupId:artifactId) and versions
-4. Providing REST API endpoints for package discovery
+1. Reading the repository index properties with [git-pkgs/nexus](https://github.com/git-pkgs/nexus)
+2. Downloading a full index or the missing incremental chunks
+3. Applying each verified chunk and its cursor in one PostgreSQL transaction
+4. Providing package and version discovery through the REST API
 
 ## API
 
@@ -76,11 +76,12 @@ For development and deployment documentation, check out [DEVELOPMENT.md](DEVELOP
 - **PostgreSQL** - Repository, package, and version data storage
 - **Redis** - Job queue and caching
 - **Sidekiq** - Background job processing
-- **Docker** - For running maven-index-exporter
+- **git-pkgs/nexus** - Go index reader installed in the application image
 
 ## Models
 
 - **Repository** - Maven repository metadata and indexing status
+- **MavenArtifact** - Artifact identity used to apply classifier and extension removals
 - **Package** - Maven packages (groupId:artifactId)
 - **Version** - Package versions with release information
 
@@ -88,7 +89,6 @@ For development and deployment documentation, check out [DEVELOPMENT.md](DEVELOP
 
 - **IndexRepositoryWorker** - Downloads and processes a single repository index
 - **SyncAllRepositoriesWorker** - Processes all repositories (runs daily)
-- **CleanupOldIndexesWorker** - Removes old downloaded files
 
 ## Contribute
 

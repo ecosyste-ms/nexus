@@ -1,391 +1,122 @@
-require "test_helper"
+require 'rbconfig'
+require 'test_helper'
 
 class IndexRepositoryServiceTest < ActiveSupport::TestCase
   setup do
     @repository = Repository.create!(
-      name: "test-repo",
-      url: "https://repo.example.com/releases"
+      name: 'test-repo',
+      url: 'https://repo.example.com/releases'
     )
     @service = IndexRepositoryService.new(@repository)
-    @service.stubs(:resolved_ip_addresses).returns(['93.184.216.34'])
-    @test_work_root = Rails.root.join('tmp', 'test-maven-indexes', Process.pid.to_s)
-    @service.stubs(:work_root).returns(@test_work_root)
-    @work_dir = @test_work_root.join(@repository.id.to_s).to_s
   end
 
-  teardown do
-    FileUtils.rm_rf(@test_work_root) if Dir.exist?(@test_work_root)
+  test 'builds a sync command with the repository URL' do
+    assert_equal [
+      'nexus',
+      'sync',
+      'https://repo.example.com/releases'
+    ], @service.nexus_command
   end
 
-  context "#create_work_directory" do
-    should "create work directory for repository" do
-      dir = @service.send(:create_work_directory)
-      assert Dir.exist?(dir)
-      assert_equal @work_dir, dir
-      assert_not_includes dir, @repository.name
-    end
-  end
+  test 'passes an existing cursor and the private address opt-out' do
+    previous_allow_private = ENV['NEXUS_ALLOW_PRIVATE']
+    ENV['NEXUS_ALLOW_PRIVATE'] = 'true'
 
-  context "#download_index" do
-    should "download index file successfully" do
-      FileUtils.mkdir_p(@work_dir)
-
-      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
-        .to_return(status: 200, body: "fake gzip content")
-
-      gz_file = @service.send(:download_index, @work_dir)
-
-      assert File.exist?(gz_file)
-      assert_equal "fake gzip content", File.read(gz_file)
-    end
-
-    should "follow redirects" do
-      FileUtils.mkdir_p(@work_dir)
-
-      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
-        .to_return(status: 302, headers: { 'Location' => 'https://cdn.example.com/index.gz' })
-
-      stub_request(:get, "https://cdn.example.com/index.gz")
-        .to_return(status: 200, body: "redirected content")
-
-      gz_file = @service.send(:download_index, @work_dir)
-
-      assert File.exist?(gz_file)
-      assert_equal "redirected content", File.read(gz_file)
-    end
-
-    should "reject redirects to private addresses" do
-      FileUtils.mkdir_p(@work_dir)
-
-      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
-        .to_return(status: 302, headers: { 'Location' => 'http://127.0.0.1/index.gz' })
-
-      error = assert_raises(RuntimeError) do
-        @service.send(:download_index, @work_dir)
-      end
-
-      assert_match /blocked host/, error.message
-      assert_not_requested :get, "http://127.0.0.1/index.gz"
-    end
-
-    should "reject repository hosts that resolve to private addresses" do
-      @service.stubs(:resolved_ip_addresses).returns(['10.0.0.5'])
-
-      error = assert_raises(RuntimeError) do
-        @service.send(:validate_download_uri!, @repository.index_url)
-      end
-
-      assert_match /blocked address/, error.message
-    end
-
-    should "raise error on failed download" do
-      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
-        .to_return(status: 404)
-
-      error = assert_raises(RuntimeError) do
-        @service.send(:download_index, @work_dir)
-      end
-
-      assert_match /Failed to download index: 404/, error.message
-    end
-
-    should "handle network timeouts" do
-      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
-        .to_timeout
-
-      assert_raises(Faraday::ConnectionFailed) do
-        @service.send(:download_index, @work_dir)
-      end
+    assert_equal [
+      'nexus',
+      'sync',
+      '--allow-private',
+      '--cursor',
+      '/tmp/cursor.json',
+      'https://repo.example.com/releases'
+    ], @service.nexus_command('/tmp/cursor.json')
+  ensure
+    if previous_allow_private
+      ENV['NEXUS_ALLOW_PRIVATE'] = previous_allow_private
+    else
+      ENV.delete('NEXUS_ALLOW_PRIVATE')
     end
   end
 
-  context "#export_index with Docker" do
-    should "run docker container to export index and create fld files" do
+  test 'writes the stored cursor to a mode 0600 temporary file' do
+    cursor = {
+      'index_id' => 'test-index',
+      'timestamp' => '2026-08-14T10:00:00Z'
+    }
+    @repository.update!(metadata: { 'nexus_cursor' => cursor })
+    path = nil
 
-      gz_file = File.join(@work_dir, 'nexus-maven-repository-index.gz')
-      FileUtils.mkdir_p(@work_dir)
-      File.write(gz_file, 'test')
-
-      # Mock Docker execution
-      mock_status = mock('status')
-      mock_status.expects(:success?).returns(true)
-
-      expected_command = [
-        'docker', 'run', '--rm',
-        '-v', "#{@work_dir}:/work",
-        'ghcr.io/ecosyste-ms/maven-index-exporter'
-      ]
-      Open3.expects(:capture3).with do |*command|
-        assert_equal expected_command, command
-        export_dir = File.join(@work_dir, 'export')
-        FileUtils.mkdir_p(export_dir)
-        File.write(File.join(export_dir, 'index.fld'), 'doc 0\n  field 0\n    name u\n    type string\n    value org.test|lib|1.0|NA|jar')
-        true
-      end.returns(['Docker export completed', '', mock_status])
-
-      fld_file = @service.send(:export_index, @work_dir, gz_file)
-
-      assert File.exist?(fld_file)
-      assert_match /export\/.*\.fld$/, fld_file
-      assert_match /org.test\|lib/, File.read(fld_file)
+    @service.with_cursor_file do |cursor_path|
+      path = cursor_path
+      assert_equal cursor, JSON.parse(File.read(cursor_path))
+      assert_equal 0o600, File.stat(cursor_path).mode & 0o777
     end
 
-    should "raise error when docker fails" do
-      gz_file = File.join(@work_dir, 'nexus-maven-repository-index.gz')
-      FileUtils.mkdir_p(@work_dir)
-      File.write(gz_file, 'test')
-
-      mock_status = mock('status')
-      mock_status.expects(:success?).returns(false)
-
-      Open3.expects(:capture3).returns(['', 'Docker error', mock_status])
-
-      error = assert_raises(RuntimeError) do
-        @service.send(:export_index, @work_dir, gz_file)
-      end
-
-      assert_match /Docker export failed/, error.message
-    end
-
-    should "raise error when no fld files are created" do
-      gz_file = File.join(@work_dir, 'nexus-maven-repository-index.gz')
-      FileUtils.mkdir_p(@work_dir)
-      File.write(gz_file, 'test')
-
-      mock_status = mock('status')
-      mock_status.expects(:success?).returns(true)
-
-      # Docker succeeds but doesn't create any fld files
-      Open3.expects(:capture3).returns(['Docker completed', '', mock_status]).tap do
-        # Create empty export directory
-        FileUtils.mkdir_p(File.join(@work_dir, 'export'))
-      end
-
-      error = assert_raises(RuntimeError) do
-        @service.send(:export_index, @work_dir, gz_file)
-      end
-
-      assert_match /No .fld file found/, error.message
-    end
+    assert_not File.exist?(path)
   end
 
-  context "#parse_index" do
-    should "parse fld file correctly" do
-      fld_content = <<~FLD
-        doc 0
-          field 0
-            name u
-            type string
-            value org.example|test-lib|1.0.0|NA|jar
-      FLD
-
-      fld_file = File.join(@work_dir, 'test.fld')
-      FileUtils.mkdir_p(@work_dir)
-      File.write(fld_file, fld_content)
-
-      packages = @service.send(:parse_index, fld_file)
-
-      assert_equal 1, packages.keys.count
-      assert packages.key?("org.example:test-lib")
-      assert_equal "org.example", packages["org.example:test-lib"][:group_id]
-      assert_equal "test-lib", packages["org.example:test-lib"][:artifact_id]
-    end
-  end
-
-  context "#save_packages" do
-    should "create packages and versions" do
-      source_time = Time.utc(2025, 10, 30, 12)
-      packages_data = {
-        "org.example:test-lib" => {
-          group_id: "org.example",
-          artifact_id: "test-lib",
-          last_modified: source_time,
-          versions: [
-            { number: "1.0.0", packaging: "jar", last_modified: source_time - 1.hour },
-            { number: "1.0.1", packaging: "jar", last_modified: source_time }
-          ]
+  test 'streams nexus output into the importer' do
+    output = [
+      { type: 'sync', mode: 'full', index_id: 'test-index' },
+      {
+        type: 'add', group_id: 'org.example', artifact_id: 'library',
+        version: '1.0.0', extension: 'jar', packaging: 'jar'
+      },
+      {
+        type: 'checkpoint',
+        cursor: {
+          index_id: 'test-index', timestamp: '2026-08-14T10:00:00Z'
         }
       }
+    ].map(&:to_json).join("\n")
 
-      assert_difference 'Package.count', 1 do
-        assert_difference 'Version.count', 2 do
-          @service.send(:save_packages, packages_data)
-        end
-      end
+    Tempfile.create(['fake-nexus-', '.rb']) do |script|
+      script.write("STDOUT.write(#{(output + "\n").dump})\n")
+      script.flush
 
-      package = Package.find_by(name: "org.example:test-lib")
-      assert_not_nil package
-      assert_equal 2, package.versions.count
-      assert_equal source_time, package.last_modified
-      assert_equal source_time - 1.hour, package.versions.find_by!(number: "1.0.0").last_modified
-    end
+      result = @service.run_nexus_process([RbConfig.ruby, script.path])
 
-    should "update existing packages" do
-      package = @repository.packages.create!(
-        name: "org.example:test-lib",
-        group_id: "org.example",
-        artifact_id: "test-lib"
-      )
-
-      packages_data = {
-        "org.example:test-lib" => {
-          group_id: "org.example",
-          artifact_id: "test-lib",
-          versions: [
-            { number: "1.0.0", packaging: "jar" }
-          ]
-        }
-      }
-
-      assert_no_difference 'Package.count' do
-        assert_difference 'Version.count', 1 do
-          @service.send(:save_packages, packages_data)
-        end
-      end
-
-      package.reload
-      assert_equal 1, package.versions.count
-    end
-
-    should "remove packages and versions missing from a full index" do
-      current_package = @repository.packages.create!(
-        name: "org.example:current",
-        group_id: "org.example",
-        artifact_id: "current"
-      )
-      current_package.versions.create!(number: "1.0.0")
-      current_package.versions.create!(number: "0.9.0")
-
-      stale_package = @repository.packages.create!(
-        name: "org.example:stale",
-        group_id: "org.example",
-        artifact_id: "stale"
-      )
-      stale_package.versions.create!(number: "1.0.0")
-
-      @service.send(:save_packages, {
-        "org.example:current" => {
-          group_id: "org.example",
-          artifact_id: "current",
-          versions: [{ number: "1.0.0", packaging: "jar" }]
-        }
-      })
-
-      assert_equal ["1.0.0"], current_package.reload.versions.pluck(:number)
-      assert_not Package.exists?(stale_package.id)
-      assert_not Version.exists?(package_id: stale_package.id)
-    end
-
-    should "roll back the full index when a row is invalid" do
-      package = @repository.packages.create!(
-        name: "org.example:test-lib",
-        group_id: "org.example",
-        artifact_id: "test-lib"
-      )
-      version = package.versions.create!(number: "1.0.0")
-
-      assert_raises(ActiveRecord::RecordInvalid) do
-        @service.send(:save_packages, {
-          "org.example:test-lib" => {
-            group_id: "changed.example",
-            artifact_id: "test-lib",
-            versions: [{ number: nil, packaging: "jar" }]
-          }
-        })
-      end
-
-      assert_equal "org.example", package.reload.group_id
-      assert Version.exists?(version.id)
+      assert_equal 'full', result[:mode]
+      assert_equal ['org.example:library'], @repository.packages.pluck(:name)
     end
   end
 
-  context "#call integration" do
-    should "mark repository as indexing at start" do
-      @service.expects(:download_index).raises(StandardError, "Test error")
+  test 'reports bounded nexus diagnostics on command failure' do
+    Tempfile.create(['fake-nexus-', '.rb']) do |script|
+      script.write("STDERR.write('repository index is unavailable')\nexit 1\n")
+      script.flush
 
-      begin
-        @service.call
-      rescue StandardError
-        # Expected
+      error = assert_raises(IndexRepositoryService::NexusCommandError) do
+        @service.run_nexus_process([RbConfig.ruby, script.path])
       end
 
-      @repository.reload
-      assert_equal 'failed', @repository.status
-    end
-
-    should "mark repository as failed on error" do
-      @service.expects(:download_index).raises(StandardError, "Test error")
-
-      assert_raises(StandardError) do
-        @service.call
-      end
-
-      @repository.reload
-      assert_equal 'failed', @repository.status
-      assert_equal 'Test error', @repository.error_message
-    end
-
-    should "mark repository as completed on success" do
-      stub_request(:get, @repository.index_url)
-        .to_return(status: 200, body: "test content")
-
-      # Mock Docker execution
-      mock_status = mock('status')
-      mock_status.expects(:success?).returns(true)
-
-      Open3.expects(:capture3).with do |*_command|
-        export_dir = File.join(@work_dir, 'export')
-        FileUtils.mkdir_p(export_dir)
-        File.write(File.join(export_dir, 'index.fld'), "doc 0\n  field 0\n    name u\n    type string\n    value org.test|lib|1.0|NA|jar\n")
-        true
-      end.returns(['Docker export completed', '', mock_status])
-
-      result = @service.call
-
-      @repository.reload
-      assert_equal 'completed', @repository.status
-      assert result[:success]
-      assert_not_nil @repository.last_indexed_at
+      assert_match(/repository index is unavailable/, error.message)
     end
   end
 
-  context "cleanup" do
-    should "cleanup old files when retention period passed" do
-      ENV['INDEX_RETENTION_DAYS'] = '1'
+  test 'marks the repository completed after a successful sync' do
+    package = @repository.packages.create!(
+      name: 'org.example:library',
+      group_id: 'org.example',
+      artifact_id: 'library'
+    )
+    package.versions.create!(number: '1.0.0')
+    @service.expects(:run_nexus).returns(mode: 'current', checkpoint_count: 0)
 
-      old_dir = @test_work_root.join('old-repo')
-      FileUtils.mkdir_p(old_dir)
+    result = @service.call
 
-      # Make directory appear old
-      FileUtils.touch(old_dir, mtime: 2.days.ago.to_time)
+    assert result[:success]
+    assert_equal 1, result[:package_count]
+    assert_equal 'completed', @repository.reload.status
+    assert_not_nil @repository.last_indexed_at
+  end
 
-      @service.send(:cleanup_files, old_dir.to_s)
+  test 'marks the repository failed after a sync error' do
+    @service.expects(:run_nexus).raises(IndexRepositoryService::NexusCommandError, 'sync failed')
 
-      assert_not Dir.exist?(old_dir)
-    ensure
-      ENV.delete('INDEX_RETENTION_DAYS')
-    end
+    assert_raises(IndexRepositoryService::NexusCommandError) { @service.call }
 
-    should "not cleanup recent files" do
-      ENV['INDEX_RETENTION_DAYS'] = '7'
-      ENV['KEEP_INDEX_FILES'] = 'false'
-
-      FileUtils.mkdir_p(@work_dir)
-
-      @service.send(:cleanup_files, @work_dir)
-
-      assert Dir.exist?(@work_dir)
-    ensure
-      ENV.delete('INDEX_RETENTION_DAYS')
-      ENV.delete('KEEP_INDEX_FILES')
-    end
-
-    should "refuse to cleanup a directory outside the index root" do
-      assert_raises(RuntimeError) do
-        @service.send(:cleanup_files, Rails.root.join('app').to_s)
-      end
-
-      assert Dir.exist?(Rails.root.join('app'))
-    end
+    assert_equal 'failed', @repository.reload.status
+    assert_equal 'sync failed', @repository.error_message
   end
 end

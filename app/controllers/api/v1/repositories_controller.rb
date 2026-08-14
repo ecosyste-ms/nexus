@@ -70,7 +70,10 @@ module Api
 
             repo.url = repo_data[:url]
             repo.ecosystem = repo_data[:ecosystem].presence || 'maven'
-            repo.status = 'pending' if repo.new_record? || url_changed
+            if repo.new_record? || url_changed
+              repo.status = 'pending'
+              repo.reset_index_state if url_changed
+            end
             repo.save!
 
             repositories_to_index << repo if url_changed || repo.needs_reindex?
