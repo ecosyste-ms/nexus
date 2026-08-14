@@ -6,7 +6,49 @@ class RepositoryTest < ActiveSupport::TestCase
 
     should validate_presence_of(:name)
     should validate_presence_of(:url)
-    should validate_uniqueness_of(:name)
+    should validate_uniqueness_of(:name).case_insensitive
+
+    should "reject names that can escape the work directory" do
+      repository = Repository.new(name: "../../app", url: "https://repo.example.com")
+
+      assert_not repository.valid?
+      assert_includes repository.errors[:name], "may only contain letters, numbers, dots, underscores, and hyphens"
+    end
+
+    should "reject non-HTTP repository URLs" do
+      repository = Repository.new(name: "test-repo", url: "file:///etc/passwd")
+
+      assert_not repository.valid?
+      assert_includes repository.errors[:url], "must be a public HTTP or HTTPS URL without credentials"
+    end
+
+    should "reject private repository addresses" do
+      repository = Repository.new(name: "test-repo", url: "http://127.0.0.1:8080/repository")
+
+      assert_not repository.valid?
+      assert_includes repository.errors[:url], "must use a public host"
+    end
+
+    should "reject IPv4-mapped private repository addresses" do
+      repository = Repository.new(name: "test-repo", url: "http://[::ffff:127.0.0.1]/repository")
+
+      assert_not repository.valid?
+      assert_includes repository.errors[:url], "must use a public host"
+    end
+
+    should "reject unsupported ecosystems" do
+      repository = Repository.new(name: "test-repo", url: "https://repo.example.com", ecosystem: "npm")
+
+      assert_not repository.valid?
+      assert_includes repository.errors[:ecosystem], "is not included in the list"
+    end
+
+    should "normalize repository names before case-sensitive database matching" do
+      repository = Repository.create!(name: " Repo.Example.COM ", url: "https://repo.example.com")
+
+      assert_equal "repo.example.com", repository.name
+      assert_not Repository.new(name: "REPO.EXAMPLE.COM", url: "https://other.example.com").valid?
+    end
   end
 
   context "associations" do
@@ -36,6 +78,12 @@ class RepositoryTest < ActiveSupport::TestCase
     should "return the correct index URL" do
       repo = Repository.new(url: "https://build.shibboleth.net/nexus/content/repositories/releases")
       assert_equal "https://build.shibboleth.net/nexus/content/repositories/releases/.index/nexus-maven-repository-index.gz", repo.index_url
+    end
+
+    should "avoid a double slash when the repository URL ends with a slash" do
+      repo = Repository.new(url: "https://repo.example.com/releases/")
+
+      assert_equal "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz", repo.index_url
     end
   end
 

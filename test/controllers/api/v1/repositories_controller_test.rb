@@ -1,6 +1,19 @@
 require "test_helper"
 
 class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    @previous_nexus_api_key = ENV['NEXUS_API_KEY']
+    ENV['NEXUS_API_KEY'] = 'test-api-key'
+  end
+
+  teardown do
+    if @previous_nexus_api_key
+      ENV['NEXUS_API_KEY'] = @previous_nexus_api_key
+    else
+      ENV.delete('NEXUS_API_KEY')
+    end
+  end
+
   context "GET /api/v1/repositories" do
     setup do
       @repo1 = Repository.create!(name: "repo1", url: "http://example.com/repo1")
@@ -29,6 +42,13 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
       json = JSON.parse(response.body)
       assert_equal "test-repo", json["name"]
       assert_equal "http://example.com", json["url"]
+    end
+
+    should "match repository names without case sensitivity" do
+      get "/api/v1/repositories/TEST-REPO"
+
+      assert_response :success
+      assert_equal "test-repo", JSON.parse(response.body)["name"]
     end
   end
 
@@ -88,7 +108,7 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
 
       post "/api/v1/sync_repositories",
         params: repos_data.to_json,
-        headers: { 'Content-Type' => 'application/json' }
+        headers: api_headers
 
       assert_response :success
       json = JSON.parse(response.body)
@@ -99,5 +119,90 @@ class Api::V1::RepositoriesControllerTest < ActionDispatch::IntegrationTest
       assert_not_nil repo
       assert_equal "http://example.com/new", repo.url
     end
+
+    should "reject requests without an API key" do
+      IndexRepositoryWorker.expects(:perform_async).never
+
+      post "/api/v1/sync_repositories",
+        params: [{ name: "new-repo", url: "https://repo.example.com" }].to_json,
+        headers: { 'Content-Type' => 'application/json' }
+
+      assert_response :unauthorized
+      assert_nil Repository.find_by(name: "new-repo")
+    end
+
+    should "fail closed when the API key is not configured" do
+      ENV.delete('NEXUS_API_KEY')
+
+      post "/api/v1/sync_repositories",
+        params: [{ name: "new-repo", url: "https://repo.example.com" }].to_json,
+        headers: api_headers
+
+      assert_response :unauthorized
+      assert_nil Repository.find_by(name: "new-repo")
+    end
+
+    should "reject an invalid batch without saving part of it" do
+      repositories = [
+        { name: "valid-repo", url: "https://repo.example.com" },
+        { name: "../../app", url: "https://repo.example.com" }
+      ]
+
+      IndexRepositoryWorker.expects(:perform_async).never
+
+      assert_no_difference 'Repository.count' do
+        post "/api/v1/sync_repositories", params: repositories.to_json, headers: api_headers
+      end
+
+      assert_response :unprocessable_entity
+      assert_includes JSON.parse(response.body)["details"], "Name may only contain letters, numbers, dots, underscores, and hyphens"
+    end
+
+    should "reindex a recently indexed repository when its URL changes" do
+      repository = Repository.create!(
+        name: "existing-repo",
+        url: "https://old.example.com",
+        status: "completed",
+        last_indexed_at: 1.hour.ago
+      )
+      IndexRepositoryWorker.expects(:perform_async).with(repository.id).once
+
+      post "/api/v1/sync_repositories",
+        params: [{ name: "EXISTING-REPO", url: "https://new.example.com" }].to_json,
+        headers: api_headers
+
+      assert_response :success
+      assert_equal "https://new.example.com", repository.reload.url
+      assert_equal "pending", repository.status
+    end
+  end
+
+  context "POST /api/v1/repositories/:name/reindex" do
+    setup do
+      @repo = Repository.create!(name: "test-repo", url: "https://repo.example.com")
+    end
+
+    should "require an API key" do
+      IndexRepositoryWorker.expects(:perform_async).never
+
+      post "/api/v1/repositories/test-repo/reindex"
+
+      assert_response :unauthorized
+    end
+
+    should "queue an index with a valid API key" do
+      IndexRepositoryWorker.expects(:perform_async).with(@repo.id).once
+
+      post "/api/v1/repositories/test-repo/reindex", headers: { 'X-API-Key' => 'test-api-key' }
+
+      assert_response :success
+    end
+  end
+
+  def api_headers
+    {
+      'Content-Type' => 'application/json',
+      'X-API-Key' => 'test-api-key'
+    }
   end
 end

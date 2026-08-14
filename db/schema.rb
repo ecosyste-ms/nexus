@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_11_22_185250) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_13_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,8 +23,10 @@ ActiveRecord::Schema[8.1].define(version: 2025_11_22_185250) do
     t.string "name", null: false
     t.bigint "repository_id", null: false
     t.datetime "updated_at", null: false
+    t.string "index_run_id"
     t.index ["artifact_id"], name: "index_packages_on_artifact_id"
     t.index ["group_id"], name: "index_packages_on_group_id"
+    t.index ["repository_id", "index_run_id"], name: "index_packages_on_repository_id_and_index_run_id"
     t.index ["last_modified"], name: "index_packages_on_last_modified"
     t.index ["repository_id", "name"], name: "index_packages_on_repository_id_and_name", unique: true
     t.index ["repository_id"], name: "index_packages_on_repository_id"
@@ -58,7 +60,9 @@ ActiveRecord::Schema[8.1].define(version: 2025_11_22_185250) do
     t.bigint "package_id", null: false
     t.string "packaging"
     t.datetime "updated_at", null: false
+    t.string "index_run_id"
     t.index ["last_modified"], name: "index_versions_on_last_modified"
+    t.index ["package_id", "index_run_id"], name: "index_versions_on_package_id_and_index_run_id"
     t.index ["package_id", "number"], name: "index_versions_on_package_id_and_number", unique: true
     t.index ["package_id"], name: "index_versions_on_package_id"
   end

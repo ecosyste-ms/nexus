@@ -3,7 +3,7 @@ require "test_helper"
 class MavenIndexParserTest < ActiveSupport::TestCase
   context "#parse" do
     setup do
-      @test_file = Rails.root.join('tmp', 'test_index.fld')
+      @test_file = Rails.root.join('tmp', "test_index_#{Process.pid}.fld")
       FileUtils.mkdir_p(File.dirname(@test_file))
 
       # Create a sample .fld file
@@ -58,6 +58,34 @@ class MavenIndexParserTest < ActiveSupport::TestCase
       assert_equal 2, spring[:versions].count
       assert_equal "5.3.0", spring[:versions][0][:number]
       assert_equal "5.3.1", spring[:versions][1][:number]
+      assert_equal Time.at(1_634_567_891).utc, spring[:last_modified]
+      assert_equal Time.at(1_634_567_890).utc, spring[:versions][0][:last_modified]
+      assert_equal Time.at(1_634_567_891).utc, spring[:versions][1][:last_modified]
+    end
+
+    should "keep one version record with the latest source timestamp" do
+      File.write(@test_file, <<~FLD)
+        doc 0
+          field 0
+            name u
+            value org.example|library|1.0.0|sources|jar
+          field 1
+            name m
+            value 1634567890000
+        doc 1
+          field 0
+            name u
+            value org.example|library|1.0.0|NA|jar
+          field 1
+            name m
+            value 1634567892000
+      FLD
+
+      package = MavenIndexParser.parse(@test_file).fetch("org.example:library")
+
+      assert_equal 1, package[:versions].count
+      assert_equal Time.at(1_634_567_892).utc, package[:versions].first[:last_modified]
+      assert_equal Time.at(1_634_567_892).utc, package[:last_modified]
     end
   end
 end

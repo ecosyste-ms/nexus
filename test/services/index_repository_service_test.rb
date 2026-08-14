@@ -7,18 +7,22 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
       url: "https://repo.example.com/releases"
     )
     @service = IndexRepositoryService.new(@repository)
-    @work_dir = Rails.root.join('tmp', 'test-maven-indexes', @repository.name).to_s
+    @service.stubs(:resolved_ip_addresses).returns(['93.184.216.34'])
+    @test_work_root = Rails.root.join('tmp', 'test-maven-indexes', Process.pid.to_s)
+    @service.stubs(:work_root).returns(@test_work_root)
+    @work_dir = @test_work_root.join(@repository.id.to_s).to_s
   end
 
   teardown do
-    FileUtils.rm_rf(@work_dir) if Dir.exist?(@work_dir)
+    FileUtils.rm_rf(@test_work_root) if Dir.exist?(@test_work_root)
   end
 
   context "#create_work_directory" do
     should "create work directory for repository" do
       dir = @service.send(:create_work_directory)
       assert Dir.exist?(dir)
-      assert_match /maven-indexes\/test-repo/, dir
+      assert_equal @work_dir, dir
+      assert_not_includes dir, @repository.name
     end
   end
 
@@ -48,6 +52,30 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
 
       assert File.exist?(gz_file)
       assert_equal "redirected content", File.read(gz_file)
+    end
+
+    should "reject redirects to private addresses" do
+      FileUtils.mkdir_p(@work_dir)
+
+      stub_request(:get, "https://repo.example.com/releases/.index/nexus-maven-repository-index.gz")
+        .to_return(status: 302, headers: { 'Location' => 'http://127.0.0.1/index.gz' })
+
+      error = assert_raises(RuntimeError) do
+        @service.send(:download_index, @work_dir)
+      end
+
+      assert_match /blocked host/, error.message
+      assert_not_requested :get, "http://127.0.0.1/index.gz"
+    end
+
+    should "reject repository hosts that resolve to private addresses" do
+      @service.stubs(:resolved_ip_addresses).returns(['10.0.0.5'])
+
+      error = assert_raises(RuntimeError) do
+        @service.send(:validate_download_uri!, @repository.index_url)
+      end
+
+      assert_match /blocked address/, error.message
     end
 
     should "raise error on failed download" do
@@ -82,17 +110,18 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
       mock_status = mock('status')
       mock_status.expects(:success?).returns(true)
 
-      # Mock Docker creating the export directory and fld file
-      Open3.expects(:capture3).with(
+      expected_command = [
         'docker', 'run', '--rm',
         '-v', "#{@work_dir}:/work",
         'ghcr.io/ecosyste-ms/maven-index-exporter'
-      ).returns(['Docker export completed', '', mock_status]).tap do
-        # Simulate Docker creating the export directory and fld file
+      ]
+      Open3.expects(:capture3).with do |*command|
+        assert_equal expected_command, command
         export_dir = File.join(@work_dir, 'export')
         FileUtils.mkdir_p(export_dir)
         File.write(File.join(export_dir, 'index.fld'), 'doc 0\n  field 0\n    name u\n    type string\n    value org.test|lib|1.0|NA|jar')
-      end
+        true
+      end.returns(['Docker export completed', '', mock_status])
 
       fld_file = @service.send(:export_index, @work_dir, gz_file)
 
@@ -165,13 +194,15 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
 
   context "#save_packages" do
     should "create packages and versions" do
+      source_time = Time.utc(2025, 10, 30, 12)
       packages_data = {
         "org.example:test-lib" => {
           group_id: "org.example",
           artifact_id: "test-lib",
+          last_modified: source_time,
           versions: [
-            { number: "1.0.0", packaging: "jar" },
-            { number: "1.0.1", packaging: "jar" }
+            { number: "1.0.0", packaging: "jar", last_modified: source_time - 1.hour },
+            { number: "1.0.1", packaging: "jar", last_modified: source_time }
           ]
         }
       }
@@ -185,6 +216,8 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
       package = Package.find_by(name: "org.example:test-lib")
       assert_not_nil package
       assert_equal 2, package.versions.count
+      assert_equal source_time, package.last_modified
+      assert_equal source_time - 1.hour, package.versions.find_by!(number: "1.0.0").last_modified
     end
 
     should "update existing packages" do
@@ -212,6 +245,57 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
 
       package.reload
       assert_equal 1, package.versions.count
+    end
+
+    should "remove packages and versions missing from a full index" do
+      current_package = @repository.packages.create!(
+        name: "org.example:current",
+        group_id: "org.example",
+        artifact_id: "current"
+      )
+      current_package.versions.create!(number: "1.0.0")
+      current_package.versions.create!(number: "0.9.0")
+
+      stale_package = @repository.packages.create!(
+        name: "org.example:stale",
+        group_id: "org.example",
+        artifact_id: "stale"
+      )
+      stale_package.versions.create!(number: "1.0.0")
+
+      @service.send(:save_packages, {
+        "org.example:current" => {
+          group_id: "org.example",
+          artifact_id: "current",
+          versions: [{ number: "1.0.0", packaging: "jar" }]
+        }
+      })
+
+      assert_equal ["1.0.0"], current_package.reload.versions.pluck(:number)
+      assert_not Package.exists?(stale_package.id)
+      assert_not Version.exists?(package_id: stale_package.id)
+    end
+
+    should "roll back the full index when a row is invalid" do
+      package = @repository.packages.create!(
+        name: "org.example:test-lib",
+        group_id: "org.example",
+        artifact_id: "test-lib"
+      )
+      version = package.versions.create!(number: "1.0.0")
+
+      assert_raises(ActiveRecord::RecordInvalid) do
+        @service.send(:save_packages, {
+          "org.example:test-lib" => {
+            group_id: "changed.example",
+            artifact_id: "test-lib",
+            versions: [{ number: nil, packaging: "jar" }]
+          }
+        })
+      end
+
+      assert_equal "org.example", package.reload.group_id
+      assert Version.exists?(version.id)
     end
   end
 
@@ -249,13 +333,12 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
       mock_status = mock('status')
       mock_status.expects(:success?).returns(true)
 
-      Open3.expects(:capture3).returns(['Docker export completed', '', mock_status]).tap do
-        # Simulate Docker creating the export directory and fld file
-        work_dir = Rails.root.join('tmp', 'maven-indexes', @repository.name).to_s
-        export_dir = File.join(work_dir, 'export')
+      Open3.expects(:capture3).with do |*_command|
+        export_dir = File.join(@work_dir, 'export')
         FileUtils.mkdir_p(export_dir)
         File.write(File.join(export_dir, 'index.fld'), "doc 0\n  field 0\n    name u\n    type string\n    value org.test|lib|1.0|NA|jar\n")
-      end
+        true
+      end.returns(['Docker export completed', '', mock_status])
 
       result = @service.call
 
@@ -270,7 +353,7 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
     should "cleanup old files when retention period passed" do
       ENV['INDEX_RETENTION_DAYS'] = '1'
 
-      old_dir = Rails.root.join('tmp', 'maven-indexes', 'old-repo')
+      old_dir = @test_work_root.join('old-repo')
       FileUtils.mkdir_p(old_dir)
 
       # Make directory appear old
@@ -295,6 +378,14 @@ class IndexRepositoryServiceTest < ActiveSupport::TestCase
     ensure
       ENV.delete('INDEX_RETENTION_DAYS')
       ENV.delete('KEEP_INDEX_FILES')
+    end
+
+    should "refuse to cleanup a directory outside the index root" do
+      assert_raises(RuntimeError) do
+        @service.send(:cleanup_files, Rails.root.join('app').to_s)
+      end
+
+      assert Dir.exist?(Rails.root.join('app'))
     end
   end
 end

@@ -7,42 +7,27 @@ class MavenIndexParser
 
   def parse
     packages = {}
-    current_doc = nil
-    reading_uinfo = false
+    document = {}
+    current_field = nil
 
-    File.readlines(file_path).each do |line|
+    File.foreach(file_path) do |line|
       line = line.strip
 
       if line.start_with?("doc ")
-        current_doc = line.split[1].to_i
-      elsif line == "name u"
-        reading_uinfo = true
-      elsif reading_uinfo && line.start_with?("value ")
-        value = line.sub("value ", "")
-        parts = value.split("|")
-
-        next if parts.length < 5
-
-        group_id = parts[0]
-        artifact_id = parts[1]
-        version = parts[2]
-        packaging = parts[4]
-
-        package_name = "#{group_id}:#{artifact_id}"
-
-        packages[package_name] ||= {
-          group_id: group_id,
-          artifact_id: artifact_id,
-          versions: []
-        }
-
-        packages[package_name][:versions] << {
-          number: version,
-          packaging: packaging
-        }
-
-        reading_uinfo = false
+        add_document(packages, document)
+        document = {}
+        current_field = nil
+      elsif line.start_with?("name ")
+        current_field = line.delete_prefix("name ")
+      elsif current_field && line.start_with?("value ")
+        document[current_field] = line.delete_prefix("value ")
+        current_field = nil
       end
+    end
+
+    add_document(packages, document)
+    packages.each_value do |package|
+      package[:versions] = package.delete(:versions_by_number).values
     end
 
     packages
@@ -50,5 +35,48 @@ class MavenIndexParser
 
   def self.parse(file_path)
     new(file_path).parse
+  end
+
+  def add_document(packages, document)
+    parts = document['u'].to_s.split('|', -1)
+    return if parts.length < 5
+
+    group_id, artifact_id, version = parts[0, 3]
+    return if group_id.blank? || artifact_id.blank? || version.blank?
+
+    last_modified = parse_timestamp(document['m'])
+    package_name = "#{group_id}:#{artifact_id}"
+    package = packages[package_name] ||= {
+      group_id: group_id,
+      artifact_id: artifact_id,
+      last_modified: nil,
+      versions_by_number: {}
+    }
+
+    existing_version = package[:versions_by_number][version]
+    if existing_version.nil? || newer_timestamp?(last_modified, existing_version[:last_modified])
+      package[:versions_by_number][version] = {
+        number: version,
+        packaging: parts[4],
+        last_modified: last_modified
+      }
+    end
+
+    if last_modified && (package[:last_modified].nil? || last_modified > package[:last_modified])
+      package[:last_modified] = last_modified
+    end
+  end
+
+  def parse_timestamp(value)
+    return if value.blank?
+
+    milliseconds = Integer(value, 10)
+    Time.at(milliseconds / 1000, (milliseconds % 1000) * 1000, :microsecond).utc
+  rescue ArgumentError
+    nil
+  end
+
+  def newer_timestamp?(candidate, existing)
+    candidate && (existing.nil? || candidate > existing)
   end
 end

@@ -97,6 +97,7 @@ The application uses the following environment variables:
 **Application:**
 - `RAILS_ENV` - Rails environment (development/test/production)
 - `PORT` - Application port (default: 3000)
+- `NEXUS_API_KEY` - Shared key required in the `X-API-Key` header for repository sync and reindex requests
 
 **External Services:**
 - `PACKAGES_ECOSYSTE_MS_URL` - Base URL for packages.ecosyste.ms API
@@ -368,6 +369,7 @@ To populate the service with repositories, POST to `/api/v1/sync_repositories` w
 ```bash
 curl -X POST http://nexus.ecosyste.ms/api/v1/sync_repositories \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $NEXUS_API_KEY" \
   -d '[
     {"name": "build.shibboleth.net", "url": "https://build.shibboleth.net/nexus/content/repositories/releases"}
   ]'
