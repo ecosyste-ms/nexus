@@ -5,7 +5,7 @@ FROM golang:1.26.6-alpine AS nexus-builder
 ARG NEXUS_REVISION
 RUN GOBIN=/out CGO_ENABLED=0 go install github.com/git-pkgs/nexus/cmd/nexus@${NEXUS_REVISION}
 
-FROM ruby:4.0.6-alpine
+FROM ruby:4.0.10-alpine
 
 ENV APP_ROOT=/usr/src/app
 ENV DATABASE_PORT=5432
